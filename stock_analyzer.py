@@ -253,15 +253,16 @@ class StockAnalyzer:
             
         return df
     
-    def scan_momentum_stocks(self, limit=20):
+    def scan_momentum_stocks(self, limit=20, progress_callback=None):
         """สแกนหาหุ้นที่มีโมเมนตัมสำหรับเล่นสั้น"""
         results = []
         
-        progress_bar = st.progress(0)
-        status_text = st.empty()
+        total_stocks = len(self.thai_stocks)
         
         for i, (symbol, name) in enumerate(self.thai_stocks.items()):
-            status_text.text(f"กำลังสแกน {name} ({i+1}/{len(self.thai_stocks)})...")
+            
+            if progress_callback:
+                progress_callback(i, total_stocks, f"กำลังสแกน {name}...")
             
             try:
                 # ดึงข้อมูล 3 เดือนล่าสุด
@@ -380,12 +381,6 @@ class StockAnalyzer:
             
             except Exception as e:
                 pass
-            
-            # อัปเดต progress bar
-            progress_bar.progress((i + 1) / len(self.thai_stocks))
-        
-        status_text.text(f"สแกนเสร็จสิ้น พบ {len(results)} หุ้น")
-        progress_bar.empty()
         
         # เรียงตามโมเมนตัมสูงสุด
         results.sort(key=lambda x: x['momentum_pct'], reverse=True)
@@ -491,6 +486,7 @@ class StockAnalyzer:
                     # ราคาใกล้แนวรับ
                     support_20 = latest['Support_20'] if not pd.isna(latest['Support_20']) else 0
                     near_support = False
+                    dist_to_support = 999
                     if support_20 > 0:
                         dist_to_support = ((current_price - support_20) / support_20) * 100
                         near_support = 0 < dist_to_support < 3
@@ -521,7 +517,7 @@ class StockAnalyzer:
                             'rsi_14': latest['RSI_14'],
                             'rsi_7': latest['RSI_7'],
                             'support': support_20,
-                            'dist_to_support': dist_to_support if support_20 > 0 else 999,
+                            'dist_to_support': dist_to_support,
                             'macd_signal': "bullish" if macd_bullish else "neutral",
                             'rebound_score': rebound_score,
                             'probability': probability,
