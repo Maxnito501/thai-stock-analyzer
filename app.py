@@ -43,7 +43,7 @@ with st.sidebar:
     st.header("⚙️ ตั้งค่า")
     
     # ค้นหาหุ้น
-    search_query = st.text_input("🔍 ค้นหาหุ้น", placeholder="เช่น ADVANC, PTT, KBANK, CPALL")
+    search_query = st.text_input("🔍 ค้นหาหุ้น", placeholder="เช่น ADVANC, PTT, SIRI, CPALL")
     
     # เลือกหุ้นจากรายการหรือจากที่ค้นหา
     stock_options = list(analyzer.thai_stocks.keys())
@@ -57,33 +57,36 @@ with st.sidebar:
             search_options = [f"{name} ({sym})" for sym, name in search_results]
             selected_display = st.selectbox("เลือกหุ้นที่พบ", search_options)
             # แยกรหัสหุ้น
-            st.session_state.selected_stock = selected_display.split('(')[-1].split(')')[0]
+            if selected_display:
+                st.session_state.selected_stock = selected_display.split('(')[-1].split(')')[0]
         else:
             # ถ้าไม่พบ ให้ลองใช้รหัสที่พิมพ์โดยตรง
             custom_symbol = analyzer.validate_stock_symbol(search_query)
             st.info(f"ลองใช้รหัส: {custom_symbol}")
             if st.button(f"✅ วิเคราะห์ {custom_symbol}"):
                 st.session_state.selected_stock = custom_symbol
-            else:
-                st.session_state.selected_stock = st.selectbox(
-                    "หรือเลือกจากรายการ", 
-                    stock_options, 
-                    format_func=lambda x: f"{analyzer.thai_stocks[x]} ({x})",
-                    index=stock_options.index(st.session_state.selected_stock) if st.session_state.selected_stock in stock_options else 0
-                )
     else:
-        st.session_state.selected_stock = st.selectbox(
+        # ถ้าไม่ได้ค้นหา ให้ใช้ selectbox ปกติ
+        current_index = 0
+        if st.session_state.selected_stock in stock_options:
+            current_index = stock_options.index(st.session_state.selected_stock)
+        
+        selected = st.selectbox(
             "เลือกหุ้น", 
             stock_options, 
             format_func=lambda x: f"{analyzer.thai_stocks[x]} ({x})",
-            index=stock_options.index(st.session_state.selected_stock) if st.session_state.selected_stock in stock_options else 0
+            index=current_index
         )
+        st.session_state.selected_stock = selected
+    
+    # แสดงหุ้นที่กำลังวิเคราะห์
+    st.info(f"📌 กำลังวิเคราะห์: {st.session_state.selected_stock}")
     
     # ระยะเวลา
     period = st.selectbox(
         "ระยะเวลา",
         options=['1mo', '3mo', '6mo', '1y', '2y', '5y'],
-        index=2,
+        index=4,
         format_func=lambda x: {
             '1mo': '1 เดือน', 
             '3mo': '3 เดือน', 
@@ -97,34 +100,39 @@ with st.sidebar:
     st.markdown("---")
     st.header("📋 พอร์ตของฉัน")
     
-    # แสดงหุ้นในพอร์ต
-    stock_name = analyzer.thai_stocks.get(st.session_state.selected_stock, st.session_state.selected_stock.split('.')[0])
-    current_shares = portfolio.get_current_shares(st.session_state.selected_stock)
+    # แสดงหุ้นในพอร์ต - ใช้คีย์ที่ถูกต้อง
+    current_stock = st.session_state.selected_stock
+    stock_name = analyzer.thai_stocks.get(current_stock, current_stock.split('.')[0])
+    current_shares = portfolio.get_current_shares(current_stock)
     
     if current_shares > 0:
-        avg_cost = portfolio.get_average_cost(st.session_state.selected_stock)
+        avg_cost = portfolio.get_average_cost(current_stock)
         st.info(f"📊 {stock_name}: {current_shares} หุ้น @ ฿{avg_cost:.2f}")
+    else:
+        st.info(f"📊 {stock_name}: ยังไม่มีในพอร์ต")
     
-    # เพิ่มหุ้น
+    # เพิ่มหุ้น - ใช้ current_stock ที่ถูกต้อง
     with st.expander("➕ เพิ่มหุ้น"):
-        shares = st.number_input("จำนวนหุ้น", min_value=1, value=100, step=100)
-        buy_price = st.number_input("ราคาซื้อ", min_value=0.01, value=50.0, step=1.0)
-        if st.button("บันทึกการซื้อ"):
-            portfolio.add_stock(st.session_state.selected_stock, stock_name, shares, buy_price)
-            st.success("บันทึกเรียบร้อย")
+        st.caption(f"เพิ่ม {stock_name} ({current_stock})")
+        shares = st.number_input("จำนวนหุ้น", min_value=1, value=100, step=100, key="buy_shares")
+        buy_price = st.number_input("ราคาซื้อ", min_value=0.01, value=round(current_price if 'current_price' in locals() else 10.0, 2), step=0.1, key="buy_price")
+        if st.button("บันทึกการซื้อ", key="buy_btn"):
+            portfolio.add_stock(current_stock, stock_name, shares, buy_price)
+            st.success(f"✅ บันทึก {stock_name} จำนวน {shares} หุ้น ราคา {buy_price} บาท เรียบร้อย")
             st.rerun()
     
     # ขายหุ้น
     if current_shares > 0:
         with st.expander("➖ ขายหุ้น"):
-            sell_shares = st.number_input("จำนวนขาย", min_value=1, max_value=current_shares, value=min(100, current_shares))
-            sell_price = st.number_input("ราคาขาย", min_value=0.01, value=50.0, step=1.0)
-            if st.button("บันทึกการขาย"):
-                if portfolio.sell_stock(st.session_state.selected_stock, sell_shares, sell_price):
-                    st.success("บันทึกเรียบร้อย")
+            st.caption(f"ขาย {stock_name} ({current_stock})")
+            sell_shares = st.number_input("จำนวนขาย", min_value=1, max_value=current_shares, value=min(100, current_shares), key="sell_shares")
+            sell_price = st.number_input("ราคาขาย", min_value=0.01, value=round(current_price if 'current_price' in locals() else 10.0, 2), step=0.1, key="sell_price")
+            if st.button("บันทึกการขาย", key="sell_btn"):
+                if portfolio.sell_stock(current_stock, sell_shares, sell_price):
+                    st.success(f"✅ ขาย {stock_name} จำนวน {sell_shares} หุ้น ราคา {sell_price} บาท เรียบร้อย")
                     st.rerun()
                 else:
-                    st.error("ไม่สามารถขายได้ จำนวนหุ้นไม่พอ")
+                    st.error("❌ ไม่สามารถขายได้ จำนวนหุ้นไม่พอ")
     
     st.markdown("---")
     if st.button("🔄 โหลดข้อมูลใหม่"):
@@ -448,7 +456,8 @@ if df is not None and not df.empty:
     analysis_data = {
         'signal': overall,
         'trend': trend,
-        'dividend': div_info['dividend_yield']
+        'dividend': div_info['dividend_yield'],
+        'name': stock_name
     }
     
     advice_title, advice_detail = portfolio.get_investment_advice(
@@ -500,6 +509,7 @@ if df is not None and not df.empty:
                 df_portfolio,
                 column_config={
                     'symbol': 'หุ้น',
+                    'code': 'รหัส',
                     'shares': 'จำนวน',
                     'avg_cost': st.column_config.NumberColumn('ต้นทุน', format="฿%.2f"),
                     'current_price': st.column_config.NumberColumn('ราคา', format="฿%.2f"),
@@ -557,7 +567,7 @@ if df is not None and not df.empty:
 
 else:
     st.error(f"ไม่สามารถโหลดข้อมูล {st.session_state.selected_stock} ได้ กรุณาตรวจสอบรหัสหุ้นหรือลองใหม่อีกครั้ง")
-    st.info("ตัวอย่างรหัสหุ้นที่ถูกต้อง: ADVANC.BK, PTT.BK, KBANK.BK, CPALL.BK, AOT.BK")
+    st.info("ตัวอย่างรหัสหุ้นที่ถูกต้อง: ADVANC.BK, PTT.BK, KBANK.BK, CPALL.BK, AOT.BK, SIRI.BK")
 
 st.markdown("---")
 st.caption("⚠️ ข้อมูลเพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำในการลงทุน ควรศึกษาข้อมูลเพิ่มเติมก่อนตัดสินใจลงทุน")
