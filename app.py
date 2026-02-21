@@ -141,7 +141,7 @@ if df is not None and not df.empty:
     fig.add_hline(y=30, line_dash="dash", line_color="green", row=2, col=1)
     
     fig.update_layout(height=600, showlegend=False)
-    fig.update_xanges(rangeslider_visible=False)
+    fig.update_xaxes(rangeslider_visible=False)
     st.plotly_chart(fig, use_container_width=True)
     
     # ตารางข้อมูลล่าสุด
