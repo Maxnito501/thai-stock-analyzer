@@ -26,6 +26,7 @@ class StockAnalyzer:
             'PTTEP.BK': 'PTTEP',
             'SCB.BK': 'SCB',
             'SCC.BK': 'SCC',
+            'SIRI.BK': 'SIRI',
             'TISCO.BK': 'TISCO',
             'TRUE.BK': 'TRUE'
         }
@@ -40,7 +41,8 @@ class StockAnalyzer:
             'การแพทย์': ['BDMS.BK', 'BH.BK'],
             'ขนส่ง': ['AOT.BK', 'BTS.BK'],
             'ปิโตรเคมี': ['IVL.BK'],
-            'ก่อสร้าง': ['SCC.BK']
+            'ก่อสร้าง': ['SCC.BK'],
+            'อสังหาฯ': ['SIRI.BK']
         }
     
     def validate_stock_symbol(self, symbol):
@@ -67,6 +69,22 @@ class StockAnalyzer:
         for symbol, name in self.thai_stocks.items():
             if query in symbol or query in name:
                 results.append((symbol, name))
+        
+        # ถ้าไม่พบและ query น่าจะเป็นรหัสหุ้น ให้ลองใช้โดยตรง
+        if not results and len(query) > 0:
+            # ตรวจสอบว่าเป็นรหัสที่ถูกต้องหรือไม่
+            test_symbol = self.validate_stock_symbol(query)
+            try:
+                stock = yf.Ticker(test_symbol)
+                info = stock.info
+                if info and info.get('regularMarketPrice') is not None:
+                    # มีข้อมูล แสดงว่ารหัสถูกต้อง
+                    display_name = info.get('shortName', test_symbol)
+                    results.append((test_symbol, display_name))
+                    # เพิ่มเข้าไปใน thai_stocks อัตโนมัติ
+                    self.thai_stocks[test_symbol] = display_name
+            except:
+                pass
         
         return results
     
@@ -411,7 +429,7 @@ class StockAnalyzer:
         return analysis
     
     def get_dividend_info(self, info):
-        """ดึงข้อมูลปันผลที่ถูกต้อง (ฟังก์ชันเดียวเท่านั้น)"""
+        """ดึงข้อมูลปันผลที่ถูกต้อง"""
         try:
             # ถ้า info เป็น None หรือไม่มีข้อมูล
             if info is None or not isinstance(info, dict):
