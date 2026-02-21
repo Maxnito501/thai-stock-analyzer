@@ -68,7 +68,8 @@ with st.sidebar:
                 st.session_state.selected_stock = st.selectbox(
                     "หรือเลือกจากรายการ", 
                     stock_options, 
-                    format_func=lambda x: f"{analyzer.thai_stocks[x]} ({x})"
+                    format_func=lambda x: f"{analyzer.thai_stocks[x]} ({x})",
+                    index=stock_options.index(st.session_state.selected_stock) if st.session_state.selected_stock in stock_options else 0
                 )
     else:
         st.session_state.selected_stock = st.selectbox(
@@ -151,6 +152,16 @@ if df is not None and not df.empty:
     
     st.header(f"📈 {stock_display_name}")
     
+    # ดึงข้อมูลปันผลอย่างปลอดภัย
+    try:
+        if info is not None:
+            div_info = analyzer.get_dividend_info(info)
+        else:
+            div_info = {'dividend_yield': 0, 'payout_ratio': 0, 'has_dividend': False}
+    except Exception as e:
+        st.warning("ไม่สามารถโหลดข้อมูลปันผลได้")
+        div_info = {'dividend_yield': 0, 'payout_ratio': 0, 'has_dividend': False}
+    
     # แสดงข้อมูลพื้นฐาน
     col1, col2, col3, col4, col5 = st.columns(5)
     
@@ -174,7 +185,6 @@ if df is not None and not df.empty:
             st.metric("P/B", "N/A")
     
     with col4:
-        div_info = analyzer.get_dividend_info(info or {})
         if div_info['dividend_yield'] > 0:
             st.metric("ปันผล", f"{div_info['dividend_yield']:.2f}%")
         else:
@@ -257,11 +267,12 @@ if df is not None and not df.empty:
         )
         
         # เพิ่ม histogram
-        colors_macd = ['green' if val >= 0 else 'red' for val in df['MACD_Histogram']]
-        fig.add_trace(
-            go.Bar(x=df.index, y=df['MACD_Histogram'], name='Histogram', marker_color=colors_macd, opacity=0.5),
-            row=3, col=1
-        )
+        if 'MACD_Histogram' in df.columns:
+            colors_macd = ['green' if val >= 0 else 'red' for val in df['MACD_Histogram']]
+            fig.add_trace(
+                go.Bar(x=df.index, y=df['MACD_Histogram'], name='Histogram', marker_color=colors_macd, opacity=0.5),
+                row=3, col=1
+            )
     
     fig.update_layout(
         height=800, 
@@ -284,27 +295,38 @@ if df is not None and not df.empty:
         # RSI Analysis
         st.markdown("**📊 RSI Analysis:**")
         rsi_analysis = analyzer.get_rsi_analysis(df)
-        for period, data in rsi_analysis.items():
-            st.markdown(f"- {period}: {data['emoji']} {data['value']:.2f} - {data['signal']} ({data['desc']})")
+        if rsi_analysis:
+            for period, data in rsi_analysis.items():
+                st.markdown(f"- {period}: {data['emoji']} {data['value']:.2f} - {data['signal']} ({data['desc']})")
+        else:
+            st.markdown("- ไม่มีข้อมูล RSI")
         
         # MACD Analysis
         st.markdown("**📈 MACD Analysis:**")
         macd_analysis = analyzer.get_macd_analysis(df)
-        for indicator, data in macd_analysis.items():
-            st.markdown(f"- {indicator}: {data['emoji']} {data['signal']}")
+        if macd_analysis:
+            for indicator, data in macd_analysis.items():
+                st.markdown(f"- {indicator}: {data['emoji']} {data['signal']}")
+        else:
+            st.markdown("- ไม่มีข้อมูล MACD")
         
         # Volume Analysis
         st.markdown("**📊 Volume Analysis:**")
         volume_analysis = analyzer.get_volume_analysis(df)
-        for indicator, data in volume_analysis.items():
-            st.markdown(f"- {indicator}: {data['emoji']} {data['signal']} ({data['desc']}) - {data['value']}")
+        if volume_analysis:
+            for indicator, data in volume_analysis.items():
+                st.markdown(f"- {indicator}: {data['emoji']} {data['signal']} ({data['desc']}) - {data['value']}")
+        else:
+            st.markdown("- ไม่มีข้อมูล Volume")
         
         # Support/Resistance
         st.markdown("**📏 แนวรับ/แนวต้าน:**")
         sr_analysis = analyzer.get_support_resistance(df)
         if sr_analysis:
-            st.markdown(f"- แนวรับ: ฿{sr_analysis['Support']['value']} (ห่าง {sr_analysis['Support']['distance']})")
-            st.markdown(f"- แนวต้าน: ฿{sr_analysis['Resistance']['value']} (ห่าง {sr_analysis['Resistance']['distance']})")
+            st.markdown(f"- แนวรับ: {sr_analysis['Support']['value']} (ห่าง {sr_analysis['Support']['distance']})")
+            st.markdown(f"- แนวต้าน: {sr_analysis['Resistance']['value']} (ห่าง {sr_analysis['Resistance']['distance']})")
+        else:
+            st.markdown("- ไม่มีข้อมูลแนวรับแนวต้าน")
         
         # นับสัญญาณ
         buy_signals = 0
@@ -343,15 +365,12 @@ if df is not None and not df.empty:
         if buy_signals > sell_signals:
             overall = "ซื้อ"
             overall_emoji = "🟢"
-            overall_color = "green"
         elif sell_signals > buy_signals:
             overall = "ขาย"
             overall_emoji = "🔴"
-            overall_color = "red"
         else:
             overall = "รอ"
             overall_emoji = "🟡"
-            overall_color = "orange"
         
         st.markdown(f"## {overall_emoji} สรุป: {overall}")
         
@@ -400,16 +419,17 @@ if df is not None and not df.empty:
             if info.get('52w_high') and info.get('52w_low'):
                 high = info.get('52w_high')
                 low = info.get('52w_low')
-                position = ((current_price - low) / (high - low)) * 100 if (high - low) > 0 else 50
-                st.markdown(f"- 52 สัปดาห์: ฿{low:.2f} - ฿{high:.2f}")
-                st.markdown(f"- ตำแหน่ง: {position:.1f}% ของช่วง")
-                st.progress(position/100, text="")
+                if high and low and high > low:
+                    position = ((current_price - low) / (high - low)) * 100
+                    st.markdown(f"- 52 สัปดาห์: ฿{low:.2f} - ฿{high:.2f}")
+                    st.markdown(f"- ตำแหน่ง: {position:.1f}% ของช่วง")
+                    st.progress(position/100, text="")
             
             # Target price
             if info.get('target_price'):
                 target = info.get('target_price')
                 upside = ((target - current_price) / current_price) * 100
-                st.markdown(f"- ราคาเป้าหมาย: ฿{target:.2f} ( upside {upside:.1f}%)")
+                st.markdown(f"- ราคาเป้าหมาย: ฿{target:.2f} (upside {upside:.1f}%)")
             
             # Recommendation
             if info.get('recommendation'):
