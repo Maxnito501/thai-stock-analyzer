@@ -138,7 +138,7 @@ class StockAnalyzer:
             df['EMA_20'] = ta.trend.ema_indicator(df['Close'], window=20)
             df['EMA_50'] = ta.trend.ema_indicator(df['Close'], window=50)
             
-            # MACD (หลายค่า)
+            # MACD
             macd = ta.trend.MACD(df['Close'])
             df['MACD'] = macd.macd()
             df['MACD_Signal'] = macd.macd_signal()
@@ -198,19 +198,18 @@ class StockAnalyzer:
         
         try:
             latest = df.iloc[-1]
-            prev = df.iloc[-2] if len(df) > 1 else latest
             
             # ตรวจสอบ Moving Averages
             ma_score = 0
-            if latest['Close'] > latest['SMA_20']:
+            if not pd.isna(latest['SMA_20']) and latest['Close'] > latest['SMA_20']:
                 ma_score += 1
-            if latest['Close'] > latest['SMA_50']:
+            if not pd.isna(latest['SMA_50']) and latest['Close'] > latest['SMA_50']:
                 ma_score += 1
-            if latest['Close'] > latest['SMA_200']:
+            if not pd.isna(latest['SMA_200']) and latest['Close'] > latest['SMA_200']:
                 ma_score += 1
-            if latest['SMA_20'] > latest['SMA_50']:
+            if not pd.isna(latest['SMA_20']) and not pd.isna(latest['SMA_50']) and latest['SMA_20'] > latest['SMA_50']:
                 ma_score += 1
-            if latest['SMA_50'] > latest['SMA_200']:
+            if not pd.isna(latest['SMA_50']) and not pd.isna(latest['SMA_200']) and latest['SMA_50'] > latest['SMA_200']:
                 ma_score += 1
             
             # ตรวจสอบ ADX (trend strength)
@@ -224,10 +223,10 @@ class StockAnalyzer:
                     adx_strength = "อ่อน"
             
             # สรุปแนวโน้ม
-            if ma_score >= 4 and latest['ADX'] > 25:
+            if ma_score >= 4 and not pd.isna(latest['ADX']) and latest['ADX'] > 25:
                 trend = f"ขาขึ้น {adx_strength}"
                 emoji = "🟢"
-            elif ma_score <= 1 and latest['ADX'] > 25:
+            elif ma_score <= 1 and not pd.isna(latest['ADX']) and latest['ADX'] > 25:
                 trend = f"ขาลง {adx_strength}"
                 emoji = "🔴"
             elif ma_score >= 3:
@@ -305,41 +304,31 @@ class StockAnalyzer:
             prev_hist = prev['MACD_Histogram'] if 'MACD_Histogram' in prev else 0
             
             # ตรวจสอบสัญญาณ
-            if macd > signal and hist > 0 and hist > prev_hist:
-                signal_text = " bullish แรง"
-                emoji = "🟢"
-            elif macd > signal and hist > 0:
-                signal_text = " bullish"
-                emoji = "🟡"
-            elif macd < signal and hist < 0 and hist < prev_hist:
-                signal_text = " bearish แรง"
-                emoji = "🔴"
-            elif macd < signal and hist < 0:
-                signal_text = " bearish"
-                emoji = "🟡"
-            elif macd > signal:
-                signal_text = "เริ่ม bullish"
-                emoji = "🟡"
-            else:
-                signal_text = "เริ่ม bearish"
-                emoji = "🟡"
-            
-            # ตรวจสอบ divergence
-            divergence = ""
-            if len(df) > 50:
-                price_20d_ago = df['Close'].iloc[-20]
-                macd_20d_ago = df['MACD'].iloc[-20]
+            if not pd.isna(macd) and not pd.isna(signal):
+                if macd > signal and hist > 0 and hist > prev_hist:
+                    signal_text = " bullish แรง"
+                    emoji = "🟢"
+                elif macd > signal and hist > 0:
+                    signal_text = " bullish"
+                    emoji = "🟡"
+                elif macd < signal and hist < 0 and hist < prev_hist:
+                    signal_text = " bearish แรง"
+                    emoji = "🔴"
+                elif macd < signal and hist < 0:
+                    signal_text = " bearish"
+                    emoji = "🟡"
+                elif macd > signal:
+                    signal_text = "เริ่ม bullish"
+                    emoji = "🟡"
+                else:
+                    signal_text = "เริ่ม bearish"
+                    emoji = "🟡"
                 
-                if latest['Close'] > price_20d_ago and macd < macd_20d_ago:
-                    divergence = " (bearish divergence)"
-                elif latest['Close'] < price_20d_ago and macd > macd_20d_ago:
-                    divergence = " (bullish divergence)"
-            
-            analysis['MACD'] = {
-                'value': f"{macd:.2f}",
-                'signal': signal_text + divergence,
-                'emoji': emoji
-            }
+                analysis['MACD'] = {
+                    'value': f"{macd:.2f}",
+                    'signal': signal_text,
+                    'emoji': emoji
+                }
         
         return analysis
     
@@ -402,23 +391,112 @@ class StockAnalyzer:
             support = latest['Support']
             resistance = latest['Resistance']
             
-            # ระยะห่างจากแนวรับ/ต้าน
-            dist_to_support = ((price - support) / support) * 100 if support > 0 else 999
-            dist_to_resistance = ((resistance - price) / price) * 100 if price > 0 else 999
-            
-            analysis['Support'] = {
-                'value': f"฿{support:.2f}",
-                'distance': f"{dist_to_support:.1f}%",
-                'signal': "ใกล้แนวรับ" if dist_to_support < 3 else "ไกลแนวรับ"
-            }
-            
-            analysis['Resistance'] = {
-                'value': f"฿{resistance:.2f}",
-                'distance': f"{dist_to_resistance:.1f}%",
-                'signal': "ใกล้แนวต้าน" if dist_to_resistance < 3 else "ไกลแนวต้าน"
-            }
+            if not pd.isna(support) and not pd.isna(resistance) and support > 0 and price > 0:
+                # ระยะห่างจากแนวรับ/ต้าน
+                dist_to_support = ((price - support) / support) * 100
+                dist_to_resistance = ((resistance - price) / price) * 100
+                
+                analysis['Support'] = {
+                    'value': f"฿{support:.2f}",
+                    'distance': f"{dist_to_support:.1f}%",
+                    'signal': "ใกล้แนวรับ" if dist_to_support < 3 else "ไกลแนวรับ"
+                }
+                
+                analysis['Resistance'] = {
+                    'value': f"฿{resistance:.2f}",
+                    'distance': f"{dist_to_resistance:.1f}%",
+                    'signal': "ใกล้แนวต้าน" if dist_to_resistance < 3 else "ไกลแนวต้าน"
+                }
         
         return analysis
+    
+    def get_dividend_info(self, info):
+        """ดึงข้อมูลปันผลที่ถูกต้อง (ฟังก์ชันเดียวเท่านั้น)"""
+        try:
+            # ถ้า info เป็น None หรือไม่มีข้อมูล
+            if info is None or not isinstance(info, dict):
+                return {
+                    'dividend_yield': 0,
+                    'payout_ratio': 0,
+                    'has_dividend': False
+                }
+            
+            div_yield = info.get('dividend_yield', 0)
+            
+            # ถ้าไม่มีข้อมูล dividend_yield ลองดูจาก key อื่น
+            if div_yield == 0:
+                div_yield = info.get('dividendYield', 0)
+            
+            # ถ้าไม่มีข้อมูล
+            if div_yield is None or div_yield == 0:
+                # ลองดูจากห้าปีย้อนหลัง
+                div_5y = info.get('fiveYearAvgDividendYield', 0)
+                if div_5y and div_5y > 0:
+                    if div_5y > 1:
+                        div_percent = div_5y
+                    else:
+                        div_percent = div_5y * 100
+                    return {
+                        'dividend_yield': round(div_percent, 2),
+                        'payout_ratio': 0,
+                        'has_dividend': True
+                    }
+                
+                return {
+                    'dividend_yield': 0,
+                    'payout_ratio': 0,
+                    'has_dividend': False
+                }
+            
+            # Yahoo Finance ส่งค่ามาเป็นทศนิยม (0.05 = 5%)
+            if isinstance(div_yield, (int, float)):
+                if div_yield > 1:  # ถ้าเป็นเปอร์เซ็นต์แล้ว (ผิดปกติ)
+                    # ตรวจสอบว่ามันเป็นเปอร์เซ็นต์ที่มากเกินไปหรือไม่
+                    if div_yield > 100:  # เช่น 674% 
+                        # ลองหาร 100 เผื่อว่ามันคูณมาแล้ว
+                        div_percent = div_yield / 100
+                        if div_percent > 100:  # ยังเกินอยู่
+                            div_percent = 0
+                    else:
+                        div_percent = div_yield
+                else:
+                    div_percent = div_yield * 100
+            else:
+                div_percent = 0
+            
+            # ตรวจสอบค่าที่เป็นไปไม่ได้ (เกิน 30% ปกติหุ้นไม่ปันผลสูงขนาดนั้น)
+            if div_percent > 30:
+                # ถ้าเกิน 30% แสดงว่ามาจากการคำนวณผิด ให้ลองคำนวณใหม่
+                if isinstance(div_yield, (int, float)) and div_yield < 1:
+                    div_percent = div_yield * 100
+                else:
+                    div_percent = 0
+            
+            # Payout ratio
+            payout = info.get('payout_ratio', 0)
+            if payout == 0:
+                payout = info.get('payoutRatio', 0)
+                
+            if isinstance(payout, (int, float)):
+                if payout > 1:
+                    payout_percent = payout
+                else:
+                    payout_percent = payout * 100
+            else:
+                payout_percent = 0
+            
+            return {
+                'dividend_yield': round(div_percent, 2),
+                'payout_ratio': round(payout_percent, 2),
+                'has_dividend': div_percent > 0
+            }
+        except Exception as e:
+            print(f"Error in get_dividend_info: {e}")
+            return {
+                'dividend_yield': 0,
+                'payout_ratio': 0,
+                'has_dividend': False
+            }
     
     def get_fundamental_rating(self, info):
         """ให้คะแนนปัจจัยพื้นฐานแบบละเอียด"""
@@ -470,7 +548,8 @@ class StockAnalyzer:
             details.append("❌ ไม่มีข้อมูล P/B")
         
         # Dividend Yield (0-2 คะแนน)
-        div = info.get('dividend_yield', 0)
+        div_info = self.get_dividend_info(info)
+        div = div_info['dividend_yield']
         if div and div > 0:
             if div > 5:
                 score += 2
@@ -555,7 +634,7 @@ class StockAnalyzer:
             return {}
         
         sector = info.get('sector', '')
-        if not sector or sector not in self.sectors:
+        if not sector:
             return {}
         
         comparison = {
@@ -569,18 +648,26 @@ class StockAnalyzer:
         sector_pb = []
         sector_div = []
         
-        for sym in self.sectors.get(sector, []):
-            try:
-                stock = yf.Ticker(sym)
-                s_info = stock.info
-                if s_info.get('trailingPE'):
-                    sector_pe.append(s_info.get('trailingPE'))
-                if s_info.get('priceToBook'):
-                    sector_pb.append(s_info.get('priceToBook'))
-                if s_info.get('dividendYield'):
-                    sector_div.append(s_info.get('dividendYield') * 100)
-            except:
-                pass
+        # ถ้ามีการกำหนดหมวดใน self.sectors
+        for sector_name, symbols in self.sectors.items():
+            if sector_name in sector or sector in sector_name:
+                for sym in symbols:
+                    try:
+                        stock = yf.Ticker(sym)
+                        s_info = stock.info
+                        if s_info.get('trailingPE'):
+                            sector_pe.append(s_info.get('trailingPE'))
+                        if s_info.get('priceToBook'):
+                            sector_pb.append(s_info.get('priceToBook'))
+                        if s_info.get('dividendYield'):
+                            div = s_info.get('dividendYield')
+                            if div and div < 1:
+                                sector_div.append(div * 100)
+                            else:
+                                sector_div.append(div)
+                    except:
+                        pass
+                break
         
         if sector_pe and info.get('pe'):
             avg_pe = sum(sector_pe) / len(sector_pe)
