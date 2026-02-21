@@ -768,4 +768,262 @@ class StockAnalyzer:
                     'has_dividend': False
                 }
             
-            div_yield = info.get('
+            div_yield = info.get('dividend_yield', 0)
+            
+            # ถ้าไม่มีข้อมูล dividend_yield ลองดูจาก key อื่น
+            if div_yield == 0:
+                div_yield = info.get('dividendYield', 0)
+            
+            # ถ้าไม่มีข้อมูล
+            if div_yield is None or div_yield == 0:
+                # ลองดูจากห้าปีย้อนหลัง
+                div_5y = info.get('fiveYearAvgDividendYield', 0)
+                if div_5y and div_5y > 0:
+                    if div_5y > 1:
+                        div_percent = div_5y
+                    else:
+                        div_percent = div_5y * 100
+                    return {
+                        'dividend_yield': round(div_percent, 2),
+                        'payout_ratio': 0,
+                        'has_dividend': True
+                    }
+                
+                return {
+                    'dividend_yield': 0,
+                    'payout_ratio': 0,
+                    'has_dividend': False
+                }
+            
+            # Yahoo Finance ส่งค่ามาเป็นทศนิยม (0.05 = 5%)
+            if isinstance(div_yield, (int, float)):
+                if div_yield > 1:  # ถ้าเป็นเปอร์เซ็นต์แล้ว (ผิดปกติ)
+                    # ตรวจสอบว่ามันเป็นเปอร์เซ็นต์ที่มากเกินไปหรือไม่
+                    if div_yield > 100:  # เช่น 674% 
+                        # ลองหาร 100 เผื่อว่ามันคูณมาแล้ว
+                        div_percent = div_yield / 100
+                        if div_percent > 100:  # ยังเกินอยู่
+                            div_percent = 0
+                    else:
+                        div_percent = div_yield
+                else:
+                    div_percent = div_yield * 100
+            else:
+                div_percent = 0
+            
+            # ตรวจสอบค่าที่เป็นไปไม่ได้ (เกิน 30% ปกติหุ้นไม่ปันผลสูงขนาดนั้น)
+            if div_percent > 30:
+                # ถ้าเกิน 30% แสดงว่ามาจากการคำนวณผิด ให้ลองคำนวณใหม่
+                if isinstance(div_yield, (int, float)) and div_yield < 1:
+                    div_percent = div_yield * 100
+                else:
+                    div_percent = 0
+            
+            # Payout ratio
+            payout = info.get('payout_ratio', 0)
+            if payout == 0:
+                payout = info.get('payoutRatio', 0)
+                
+            if isinstance(payout, (int, float)):
+                if payout > 1:
+                    payout_percent = payout
+                else:
+                    payout_percent = payout * 100
+            else:
+                payout_percent = 0
+            
+            return {
+                'dividend_yield': round(div_percent, 2),
+                'payout_ratio': round(payout_percent, 2),
+                'has_dividend': div_percent > 0
+            }
+        except Exception as e:
+            print(f"Error in get_dividend_info: {e}")
+            return {
+                'dividend_yield': 0,
+                'payout_ratio': 0,
+                'has_dividend': False
+            }
+    
+    def get_fundamental_rating(self, info):
+        """ให้คะแนนปัจจัยพื้นฐานแบบละเอียด"""
+        if not info:
+            return 0, "ไม่มีข้อมูล", "⚪", []
+        
+        score = 0
+        max_score = 10
+        details = []
+        
+        # P/E Ratio (0-2 คะแนน)
+        pe = info.get('pe')
+        if pe and pe > 0:
+            if pe < 10:
+                score += 2
+                details.append("✅ P/E ต่ำมาก (ถูก)")
+            elif pe < 15:
+                score += 1.5
+                details.append("✅ P/E เหมาะสม")
+            elif pe < 20:
+                score += 1
+                details.append("⚪ P/E ปานกลาง")
+            elif pe < 30:
+                score += 0.5
+                details.append("⚠️ P/E ค่อนข้างสูง")
+            else:
+                details.append("❌ P/E สูงมาก (แพง)")
+        else:
+            details.append("❌ ไม่มีข้อมูล P/E")
+        
+        # P/B Ratio (0-2 คะแนน)
+        pb = info.get('pb')
+        if pb and pb > 0:
+            if pb < 1:
+                score += 2
+                details.append("✅ P/B ต่ำกว่า 1 (ถูกมาก)")
+            elif pb < 1.5:
+                score += 1.5
+                details.append("✅ P/B เหมาะสม")
+            elif pb < 2:
+                score += 1
+                details.append("⚪ P/B ปานกลาง")
+            elif pb < 3:
+                score += 0.5
+                details.append("⚠️ P/B ค่อนข้างสูง")
+            else:
+                details.append("❌ P/B สูงมาก")
+        else:
+            details.append("❌ ไม่มีข้อมูล P/B")
+        
+        # Dividend Yield (0-2 คะแนน)
+        div_info = self.get_dividend_info(info)
+        div = div_info['dividend_yield']
+        if div and div > 0:
+            if div > 5:
+                score += 2
+                details.append(f"✅ ปันผลสูง {div:.1f}%")
+            elif div > 3:
+                score += 1.5
+                details.append(f"✅ ปันผลดี {div:.1f}%")
+            elif div > 1:
+                score += 1
+                details.append(f"⚪ ปันผล {div:.1f}%")
+            else:
+                score += 0.5
+                details.append(f"⚠️ ปันผลต่ำ {div:.1f}%")
+        else:
+            details.append("❌ ไม่ปันผล")
+        
+        # ROE (0-1.5 คะแนน)
+        roe = info.get('roe')
+        if roe and roe > 0:
+            roe_pct = roe * 100
+            if roe_pct > 20:
+                score += 1.5
+                details.append(f"✅ ROE สูง {roe_pct:.1f}%")
+            elif roe_pct > 15:
+                score += 1
+                details.append(f"✅ ROE ดี {roe_pct:.1f}%")
+            elif roe_pct > 10:
+                score += 0.5
+                details.append(f"⚪ ROE ปานกลาง {roe_pct:.1f}%")
+            else:
+                details.append(f"⚠️ ROE ต่ำ {roe_pct:.1f}%")
+        
+        # Profit Margin (0-1.5 คะแนน)
+        margin = info.get('profit_margin')
+        if margin and margin > 0:
+            margin_pct = margin * 100
+            if margin_pct > 20:
+                score += 1.5
+                details.append(f"✅ อัตรากำไรสูง {margin_pct:.1f}%")
+            elif margin_pct > 15:
+                score += 1
+                details.append(f"✅ อัตรากำไรดี {margin_pct:.1f}%")
+            elif margin_pct > 10:
+                score += 0.5
+                details.append(f"⚪ อัตรากำไรปานกลาง {margin_pct:.1f}%")
+            else:
+                details.append(f"⚠️ อัตรากำไรต่ำ {margin_pct:.1f}%")
+        
+        # Debt to Equity (0-1 คะแนน)
+        debt = info.get('debt_to_equity')
+        if debt and debt > 0:
+            if debt < 0.5:
+                score += 1
+                details.append(f"✅ หนี้ต่ำ {debt:.2f}")
+            elif debt < 1:
+                score += 0.5
+                details.append(f"⚪ หนี้ปานกลาง {debt:.2f}")
+            else:
+                details.append(f"⚠️ หนี้สูง {debt:.2f}")
+        
+        # คำนวณคะแนน
+        final_score = (score / max_score) * 100
+        
+        if final_score >= 80:
+            rating = "ดีมาก"
+            emoji = "🟢"
+        elif final_score >= 60:
+            rating = "ดี"
+            emoji = "🟡"
+        elif final_score >= 40:
+            rating = "ปานกลาง"
+            emoji = "⚪"
+        else:
+            rating = "อ่อน"
+            emoji = "🔴"
+        
+        return final_score, rating, emoji, details
+    
+    def compare_with_sector(self, symbol, info):
+        """เปรียบเทียบกับหุ้นในหมวดเดียวกัน"""
+        if not info:
+            return {}
+        
+        sector = info.get('sector', '')
+        if not sector:
+            return {}
+        
+        comparison = {
+            'pe_vs_sector': 'N/A',
+            'pb_vs_sector': 'N/A',
+            'div_vs_sector': 'N/A'
+        }
+        
+        # หาค่าเฉลี่ยของหมวด
+        sector_pe = []
+        sector_pb = []
+        sector_div = []
+        
+        # ถ้ามีการกำหนดหมวดใน self.sectors
+        for sector_name, symbols in self.sectors.items():
+            if sector_name in sector or sector in sector_name:
+                for sym in symbols:
+                    try:
+                        stock = yf.Ticker(sym)
+                        s_info = stock.info
+                        if s_info.get('trailingPE'):
+                            sector_pe.append(s_info.get('trailingPE'))
+                        if s_info.get('priceToBook'):
+                            sector_pb.append(s_info.get('priceToBook'))
+                        if s_info.get('dividendYield'):
+                            div = s_info.get('dividendYield')
+                            if div and div < 1:
+                                sector_div.append(div * 100)
+                            else:
+                                sector_div.append(div)
+                    except:
+                        pass
+                break
+        
+        if sector_pe and info.get('pe'):
+            avg_pe = sum(sector_pe) / len(sector_pe)
+            pe_ratio = info.get('pe') / avg_pe
+            if pe_ratio < 0.8:
+                comparison['pe_vs_sector'] = "ต่ำกว่าหมวด (ถูก)"
+            elif pe_ratio > 1.2:
+                comparison['pe_vs_sector'] = "สูงกว่าหมวด (แพง)"
+            else:
+                comparison['pe_vs_sector'] = "ใกล้เคียงหมวด"
+        
+        return comparison
