@@ -543,4 +543,149 @@ with tab1:
             st.dataframe(df.tail(20))
 
     else:
-        st.error(f"ไม่สามารถโหลดข้อมูล {
+        st.error(f"ไม่สามารถโหลดข้อมูล {st.session_state.selected_stock} ได้ กรุณาตรวจสอบรหัสหุ้นหรือลองใหม่อีกครั้ง")
+        st.info("ตัวอย่างรหัสหุ้นที่ถูกต้อง: ADVANC.BK, PTT.BK, KBANK.BK, CPALL.BK, AOT.BK, SIRI.BK")
+
+with tab2:
+    st.header("🚀 สแกนหุ้นโมเมนตัม (เล่นสั้น)")
+    st.markdown("ค้นหาหุ้นที่มีโมเมนตัมแข็งแกร่ง เหมาะสำหรับเล่นสั้นทำกำไร")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        limit = st.number_input("จำนวนหุ้นที่ต้องการแสดง", min_value=5, max_value=50, value=20, step=5)
+    with col2:
+        if st.button("🔍 เริ่มสแกนหุ้น", type="primary", key="scan_momentum"):
+            with st.spinner("กำลังสแกนหุ้นทั้งหมด กรุณารอสักครู่..."):
+                # สร้าง progress bar
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                # ฟังก์ชัน callback สำหรับอัปเดตความคืบหน้า
+                def update_progress(current, total, message):
+                    progress = (current + 1) / total
+                    progress_bar.progress(progress)
+                    status_text.text(message)
+                
+                # เรียกใช้ฟังก์ชันสแกน
+                momentum_stocks = analyzer.scan_momentum_stocks(limit=limit)
+                
+                progress_bar.empty()
+                status_text.empty()
+                
+                if momentum_stocks:
+                    st.success(f"พบ {len(momentum_stocks)} หุ้นที่มีโมเมนตัม")
+                    
+                    # สร้าง DataFrame
+                    df_momentum = pd.DataFrame(momentum_stocks)
+                    
+                    # แสดงตาราง
+                    st.dataframe(
+                        df_momentum,
+                        column_config={
+                            'symbol': 'หุ้น',
+                            'code': 'รหัส',
+                            'price': st.column_config.NumberColumn('ราคา', format="฿%.2f"),
+                            'change_1d': st.column_config.NumberColumn('เปลี่ยน 1วัน', format="%.2f%%"),
+                            'change_5d': st.column_config.NumberColumn('เปลี่ยน 5วัน', format="%.2f%%"),
+                            'volume_ratio': st.column_config.NumberColumn('ปริมาณ', format="%.2f"),
+                            'rsi': st.column_config.NumberColumn('RSI', format="%.2f"),
+                            'momentum_pct': st.column_config.NumberColumn('โมเมนตัม', format="%.0f%%"),
+                            'signal_type': 'สัญญาณ',
+                            'holding_period': 'ระยะถือ',
+                            'target': st.column_config.NumberColumn('เป้าหมาย', format="฿%.2f"),
+                            'stop_loss': st.column_config.NumberColumn('Cut loss', format="฿%.2f")
+                        },
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # แสดงรายละเอียดเพิ่มเติม
+                    st.subheader("📊 รายละเอียดสัญญาณ")
+                    for i, stock in enumerate(momentum_stocks[:5]):
+                        with st.expander(f"{i+1}. {stock['symbol']} ({stock['code']}) - {stock['signal_emoji']} {stock['signal_type']} ({stock['momentum_pct']:.0f}%)"):
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("ราคาปัจจุบัน", f"฿{stock['price']:.2f}")
+                                st.metric("RSI", f"{stock['rsi']:.2f}")
+                            with col2:
+                                st.metric("เป้าหมาย", f"฿{stock['target']:.2f}")
+                                st.metric("Cut loss", f"฿{stock['stop_loss']:.2f}")
+                            with col3:
+                                st.metric("ระยะถือ", stock['holding_period'])
+                                st.metric("ATR", f"{stock['atr_pct']:.2f}%")
+                            
+                            st.markdown("**สัญญาณที่พบ:**")
+                            signals_text = ", ".join([f"✅ {s}" for s in stock['signals']])
+                            st.markdown(signals_text)
+                else:
+                    st.warning("ไม่พบหุ้นที่มีโมเมนตัมในขณะนี้")
+
+with tab3:
+    st.header("💥 สแกนหุ้น breakout")
+    st.markdown("หาหุ้นที่กำลังจะทะลุแนวต้าน มีโอกาสปรับตัวขึ้นแรง")
+    
+    if st.button("🔍 สแกนหุ้น breakout", key="scan_breakout"):
+        with st.spinner("กำลังสแกนหุ้น..."):
+            breakout_stocks = analyzer.scan_breakout_stocks(limit=20)
+            
+            if breakout_stocks:
+                st.success(f"พบ {len(breakout_stocks)} หุ้นที่กำลังจะ breakout")
+                
+                df_breakout = pd.DataFrame(breakout_stocks)
+                st.dataframe(
+                    df_breakout,
+                    column_config={
+                        'symbol': 'หุ้น',
+                        'code': 'รหัส',
+                        'price': st.column_config.NumberColumn('ราคา', format="฿%.2f"),
+                        'resistance_20': st.column_config.NumberColumn('แนวต้าน', format="฿%.2f"),
+                        'dist_to_resistance': st.column_config.NumberColumn('ระยะห่าง', format="%.2f%%"),
+                        'volume_ratio': st.column_config.NumberColumn('ปริมาณ', format="%.2f"),
+                        'probability': 'โอกาส',
+                        'breakout_type': 'ประเภท',
+                        'target_1': st.column_config.NumberColumn('เป้า 1', format="฿%.2f"),
+                        'target_2': st.column_config.NumberColumn('เป้า 2', format="฿%.2f"),
+                        'stop_loss': st.column_config.NumberColumn('Cut loss', format="฿%.2f")
+                    },
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.warning("ไม่พบหุ้นที่กำลังจะ breakout ในขณะนี้")
+
+with tab4:
+    st.header("📉 สแกนหุ้น oversold รอรีบาวด์")
+    st.markdown("หาหุ้นที่ถูกขายมากเกินไป มีโอกาสรีบาวด์ทางเทคนิค")
+    
+    if st.button("🔍 สแกนหุ้นรีบาวด์", key="scan_rebound"):
+        with st.spinner("กำลังสแกนหุ้น..."):
+            rebound_stocks = analyzer.scan_oversold_rebound(limit=20)
+            
+            if rebound_stocks:
+                st.success(f"พบ {len(rebound_stocks)} หุ้นที่ oversold และมีโอกาสรีบาวด์")
+                
+                df_rebound = pd.DataFrame(rebound_stocks)
+                st.dataframe(
+                    df_rebound,
+                    column_config={
+                        'symbol': 'หุ้น',
+                        'code': 'รหัส',
+                        'price': st.column_config.NumberColumn('ราคา', format="฿%.2f"),
+                        'rsi_14': st.column_config.NumberColumn('RSI 14', format="%.2f"),
+                        'rsi_7': st.column_config.NumberColumn('RSI 7', format="%.2f"),
+                        'support': st.column_config.NumberColumn('แนวรับ', format="฿%.2f"),
+                        'dist_to_support': st.column_config.NumberColumn('ระยะห่าง', format="%.2f%%"),
+                        'probability': 'โอกาส',
+                        'rebound_score': 'คะแนน',
+                        'target_1': st.column_config.NumberColumn('เป้า 1', format="฿%.2f"),
+                        'target_2': st.column_config.NumberColumn('เป้า 2', format="฿%.2f"),
+                        'stop_loss': st.column_config.NumberColumn('Cut loss', format="฿%.2f")
+                    },
+                    use_container_width=True,
+                    hide_index=True
+                )
+            else:
+                st.warning("ไม่พบหุ้นที่ oversold ในขณะนี้")
+
+st.markdown("---")
+st.caption("⚠️ ข้อมูลเพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำในการลงทุน ควรศึกษาข้อมูลเพิ่มเติมก่อนตัดสินใจลงทุน")
