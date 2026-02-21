@@ -4,6 +4,7 @@ import numpy as np
 import ta
 from datetime import datetime, timedelta
 import requests
+import time
 
 class StockAnalyzer:
     def __init__(self):
@@ -28,21 +29,34 @@ class StockAnalyzer:
             'SCC.BK': 'SCC',
             'SIRI.BK': 'SIRI',
             'TISCO.BK': 'TISCO',
-            'TRUE.BK': 'TRUE'
+            'TRUE.BK': 'TRUE',
+            'BANPU.BK': 'BANPU',
+            'CHG.BK': 'CHG',
+            'COM7.BK': 'COM7',
+            'EA.BK': 'EA',
+            'JAS.BK': 'JAS',
+            'LH.BK': 'LH',
+            'MINT.BK': 'MINT',
+            'PTG.BK': 'PTG',
+            'RATCH.BK': 'RATCH',
+            'SAWAD.BK': 'SAWAD',
+            'TMB.BK': 'TMB',
+            'TOP.BK': 'TOP',
+            'TU.BK': 'TU',
+            'WHA.BK': 'WHA'
         }
         
         # หมวดหมู่หุ้น
         self.sectors = {
-            'ธนาคาร': ['KBANK.BK', 'KTB.BK', 'SCB.BK', 'TISCO.BK'],
-            'พลังงาน': ['PTT.BK', 'PTTEP.BK', 'GULF.BK'],
-            'สื่อสาร': ['ADVANC.BK', 'DTAC.BK', 'INTUCH.BK', 'TRUE.BK'],
-            'ค้าปลีก': ['CPALL.BK', 'CRC.BK'],
-            'อาหาร': ['CPF.BK'],
-            'การแพทย์': ['BDMS.BK', 'BH.BK'],
+            'ธนาคาร': ['KBANK.BK', 'KTB.BK', 'SCB.BK', 'TISCO.BK', 'TMB.BK'],
+            'พลังงาน': ['PTT.BK', 'PTTEP.BK', 'GULF.BK', 'BANPU.BK', 'EA.BK', 'TOP.BK', 'RATCH.BK'],
+            'สื่อสาร': ['ADVANC.BK', 'DTAC.BK', 'INTUCH.BK', 'TRUE.BK', 'JAS.BK'],
+            'ค้าปลีก': ['CPALL.BK', 'CRC.BK', 'COM7.BK'],
+            'อาหาร': ['CPF.BK', 'MINT.BK', 'TU.BK'],
+            'การแพทย์': ['BDMS.BK', 'BH.BK', 'CHG.BK'],
             'ขนส่ง': ['AOT.BK', 'BTS.BK'],
-            'ปิโตรเคมี': ['IVL.BK'],
-            'ก่อสร้าง': ['SCC.BK'],
-            'อสังหาฯ': ['SIRI.BK']
+            'อสังหาฯ': ['SIRI.BK', 'LH.BK', 'WHA.BK'],
+            'การเงิน': ['SAWAD.BK']
         }
     
     def validate_stock_symbol(self, symbol):
@@ -111,6 +125,7 @@ class StockAnalyzer:
                 '52w_high': info.get('fiftyTwoWeekHigh', None),
                 '52w_low': info.get('fiftyTwoWeekLow', None),
                 'avg_volume': info.get('averageVolume', 0),
+                'volume': info.get('volume', 0),
                 'eps': info.get('trailingEps', None),
                 'profit_margin': info.get('profitMargins', None),
                 'debt_to_equity': info.get('debtToEquity', None),
@@ -146,12 +161,14 @@ class StockAnalyzer:
             df['RSI_21'] = ta.momentum.RSIIndicator(df['Close'], window=21).rsi()
             
             # Moving Averages
+            df['SMA_5'] = ta.trend.sma_indicator(df['Close'], window=5)
             df['SMA_10'] = ta.trend.sma_indicator(df['Close'], window=10)
             df['SMA_20'] = ta.trend.sma_indicator(df['Close'], window=20)
             df['SMA_50'] = ta.trend.sma_indicator(df['Close'], window=50)
             df['SMA_100'] = ta.trend.sma_indicator(df['Close'], window=100)
             df['SMA_200'] = ta.trend.sma_indicator(df['Close'], window=200)
             
+            df['EMA_5'] = ta.trend.ema_indicator(df['Close'], window=5)
             df['EMA_10'] = ta.trend.ema_indicator(df['Close'], window=10)
             df['EMA_20'] = ta.trend.ema_indicator(df['Close'], window=20)
             df['EMA_50'] = ta.trend.ema_indicator(df['Close'], window=50)
@@ -168,27 +185,42 @@ class StockAnalyzer:
             df['BB_Middle'] = bb.bollinger_mavg()
             df['BB_Lower'] = bb.bollinger_lband()
             df['BB_Width'] = (df['BB_Upper'] - df['BB_Lower']) / df['BB_Middle']
+            df['BB_Position'] = (df['Close'] - df['BB_Lower']) / (df['BB_Upper'] - df['BB_Lower'])
             
             # Volume
             df['Volume_SMA'] = df['Volume'].rolling(window=20).mean()
             df['Volume_Ratio'] = df['Volume'] / df['Volume_SMA']
+            df['Volume_5_SMA'] = df['Volume'].rolling(window=5).mean()
+            df['Volume_5_Ratio'] = df['Volume'] / df['Volume_5_SMA']
             
             # Support/Resistance
-            df['Resistance'] = df['High'].rolling(window=20).max()
-            df['Support'] = df['Low'].rolling(window=20).min()
+            df['Resistance_20'] = df['High'].rolling(window=20).max()
+            df['Support_20'] = df['Low'].rolling(window=20).min()
+            df['Resistance_50'] = df['High'].rolling(window=50).max()
+            df['Support_50'] = df['Low'].rolling(window=50).min()
             
             # Price change
-            df['Price_Change'] = df['Close'].pct_change() * 100
+            df['Price_Change_1d'] = df['Close'].pct_change(1) * 100
+            df['Price_Change_5d'] = df['Close'].pct_change(5) * 100
+            df['Price_Change_10d'] = df['Close'].pct_change(10) * 100
+            df['Price_Change_20d'] = df['Close'].pct_change(20) * 100
+            
+            # Volume change
             df['Volume_Change'] = df['Volume'].pct_change() * 100
             
             # Volatility
-            df['Volatility'] = df['Close'].pct_change().rolling(window=20).std() * np.sqrt(252)
+            df['Volatility_5'] = df['Close'].pct_change().rolling(window=5).std() * np.sqrt(252)
+            df['Volatility_20'] = df['Close'].pct_change().rolling(window=20).std() * np.sqrt(252)
             
             # ADX (trend strength)
             adx = ta.trend.ADXIndicator(df['High'], df['Low'], df['Close'])
             df['ADX'] = adx.adx()
             df['DI_Pos'] = adx.adx_pos()
             df['DI_Neg'] = adx.adx_neg()
+            
+            # ATR (Average True Range)
+            df['ATR'] = ta.volatility.AverageTrueRange(df['High'], df['Low'], df['Close']).average_true_range()
+            df['ATR_Pct'] = (df['ATR'] / df['Close']) * 100
             
             # Stochastic
             stoch = ta.momentum.StochasticOscillator(df['High'], df['Low'], df['Close'])
@@ -203,11 +235,308 @@ class StockAnalyzer:
             
             # OBV (On-Balance Volume)
             df['OBV'] = ta.volume.OnBalanceVolumeIndicator(df['Close'], df['Volume']).on_balance_volume()
+            df['OBV_Change'] = df['OBV'].pct_change() * 100
+            
+            # Momentum Indicators
+            df['Momentum_5'] = df['Close'] - df['Close'].shift(5)
+            df['Momentum_10'] = df['Close'] - df['Close'].shift(10)
+            df['Momentum_5_Pct'] = (df['Momentum_5'] / df['Close'].shift(5)) * 100
+            df['Momentum_10_Pct'] = (df['Momentum_10'] / df['Close'].shift(10)) * 100
+            
+            # Rate of Change
+            df['ROC_5'] = ta.momentum.ROCIndicator(df['Close'], window=5).roc()
+            df['ROC_10'] = ta.momentum.ROCIndicator(df['Close'], window=10).roc()
+            df['ROC_20'] = ta.momentum.ROCIndicator(df['Close'], window=20).roc()
             
         except Exception as e:
             print(f"Error calculating indicators: {e}")
             
         return df
+    
+    def scan_momentum_stocks(self, limit=20):
+        """สแกนหาหุ้นที่มีโมเมนตัมสำหรับเล่นสั้น"""
+        results = []
+        
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for i, (symbol, name) in enumerate(self.thai_stocks.items()):
+            status_text.text(f"กำลังสแกน {name} ({i+1}/{len(self.thai_stocks)})...")
+            
+            try:
+                # ดึงข้อมูล 3 เดือนล่าสุด
+                df, info = self.get_stock_data(symbol, period='3mo')
+                
+                if df is not None and not df.empty and len(df) > 20:
+                    df = self.calculate_indicators(df)
+                    
+                    # ข้อมูลล่าสุด
+                    latest = df.iloc[-1]
+                    prev = df.iloc[-2] if len(df) > 1 else latest
+                    
+                    current_price = latest['Close']
+                    prev_price = prev['Close']
+                    
+                    # คำนวณโมเมนตัมสัญญาณ
+                    momentum_score = 0
+                    signals = []
+                    
+                    # 1. ราคาเหนือ EMA 5 (ระยะสั้น)
+                    if not pd.isna(latest['EMA_5']) and current_price > latest['EMA_5']:
+                        momentum_score += 1
+                        signals.append("EMA_5")
+                    
+                    # 2. EMA 5 > EMA 10 (กระทิงระยะสั้น)
+                    if not pd.isna(latest['EMA_5']) and not pd.isna(latest['EMA_10']) and latest['EMA_5'] > latest['EMA_10']:
+                        momentum_score += 1
+                        signals.append("EMA_CROSS")
+                    
+                    # 3. RSI 7 อยู่ในช่วงกระทิง (50-70)
+                    if not pd.isna(latest['RSI_7']) and 50 < latest['RSI_7'] < 70:
+                        momentum_score += 1
+                        signals.append("RSI_7")
+                    
+                    # 4. MACD กระทิง
+                    if not pd.isna(latest['MACD']) and not pd.isna(latest['MACD_Signal']) and latest['MACD'] > latest['MACD_Signal']:
+                        momentum_score += 1
+                        signals.append("MACD")
+                    
+                    # 5. ปริมาณสูงกว่าค่าเฉลี่ย
+                    if not pd.isna(latest['Volume_Ratio']) and latest['Volume_Ratio'] > 1.2:
+                        momentum_score += 1
+                        signals.append("VOLUME")
+                    
+                    # 6. ราคาเพิ่มขึ้น 5 วัน
+                    if not pd.isna(latest['Price_Change_5d']) and latest['Price_Change_5d'] > 3:
+                        momentum_score += 1
+                        signals.append("GAIN_5D")
+                    
+                    # 7. ROC 5 เป็นบวก
+                    if not pd.isna(latest['ROC_5']) and latest['ROC_5'] > 1:
+                        momentum_score += 1
+                        signals.append("ROC")
+                    
+                    # 8. Stochastic ในโซนกระทิง
+                    if not pd.isna(latest['Stoch_K']) and not pd.isna(latest['Stoch_D']) and latest['Stoch_K'] > latest['Stoch_D'] and latest['Stoch_K'] < 80:
+                        momentum_score += 1
+                        signals.append("STOCH")
+                    
+                    # 9. ATR สูง (ความผันผวน)
+                    if not pd.isna(latest['ATR_Pct']) and latest['ATR_Pct'] > 2:
+                        momentum_score += 1
+                        signals.append("HIGH_ATR")
+                    
+                    # 10. ราคาใกล้แนวต้าน ( breakout โอกาส)
+                    if not pd.isna(latest['Resistance_20']) and current_price / latest['Resistance_20'] > 0.95:
+                        momentum_score += 1
+                        signals.append("NEAR_RESISTANCE")
+                    
+                    # คำนวณเปอร์เซ็นต์โมเมนตัม
+                    momentum_pct = (momentum_score / 10) * 100
+                    
+                    # เฉพาะหุ้นที่มีโมเมนตัมสูง (> 50%)
+                    if momentum_pct >= 50:
+                        # หาสัญญาณเพิ่มเติม
+                        if momentum_pct >= 80:
+                            signal_type = "แข็งแกร่ง"
+                            signal_emoji = "🟢"
+                        elif momentum_pct >= 60:
+                            signal_type = "ดี"
+                            signal_emoji = "🟡"
+                        else:
+                            signal_type = "ปานกลาง"
+                            signal_emoji = "⚪"
+                        
+                        # ราคาเป้าหมายระยะสั้น
+                        target_price = current_price * 1.05  # +5%
+                        stop_loss = current_price * 0.97  # -3%
+                        
+                        # คำนวณระยะเวลาที่เหมาะถือ
+                        if latest['ATR_Pct'] > 3:
+                            holding_period = "1-3 วัน"
+                        elif latest['ATR_Pct'] > 2:
+                            holding_period = "3-7 วัน"
+                        else:
+                            holding_period = "1-2 สัปดาห์"
+                        
+                        results.append({
+                            'symbol': name,
+                            'code': symbol,
+                            'price': current_price,
+                            'change_1d': latest.get('Price_Change_1d', 0),
+                            'change_5d': latest.get('Price_Change_5d', 0),
+                            'volume_ratio': latest.get('Volume_Ratio', 1),
+                            'rsi': latest.get('RSI_14', 50),
+                            'momentum_score': momentum_score,
+                            'momentum_pct': momentum_pct,
+                            'signal_type': signal_type,
+                            'signal_emoji': signal_emoji,
+                            'signals': signals,
+                            'target': target_price,
+                            'stop_loss': stop_loss,
+                            'holding_period': holding_period,
+                            'atr_pct': latest.get('ATR_Pct', 0)
+                        })
+            
+            except Exception as e:
+                pass
+            
+            # อัปเดต progress bar
+            progress_bar.progress((i + 1) / len(self.thai_stocks))
+        
+        status_text.text(f"สแกนเสร็จสิ้น พบ {len(results)} หุ้น")
+        progress_bar.empty()
+        
+        # เรียงตามโมเมนตัมสูงสุด
+        results.sort(key=lambda x: x['momentum_pct'], reverse=True)
+        
+        return results[:limit]
+    
+    def scan_breakout_stocks(self, limit=20):
+        """สแกนหาหุ้นที่กำลังจะ breakout"""
+        results = []
+        
+        for symbol, name in self.thai_stocks.items():
+            try:
+                df, info = self.get_stock_data(symbol, period='3mo')
+                
+                if df is not None and not df.empty and len(df) > 50:
+                    df = self.calculate_indicators(df)
+                    
+                    latest = df.iloc[-1]
+                    current_price = latest['Close']
+                    
+                    # หาแนวต้านสำคัญ
+                    resistance_50 = latest['Resistance_50'] if not pd.isna(latest['Resistance_50']) else 0
+                    resistance_20 = latest['Resistance_20'] if not pd.isna(latest['Resistance_20']) else 0
+                    
+                    if resistance_20 > 0 and resistance_50 > 0:
+                        # ใกล้แนวต้าน 50 วัน
+                        dist_to_resistance_50 = ((resistance_50 - current_price) / current_price) * 100
+                        
+                        # ใกล้แนวต้าน 20 วัน
+                        dist_to_resistance_20 = ((resistance_20 - current_price) / current_price) * 100
+                        
+                        # ปริมาณเพิ่มขึ้น
+                        volume_surge = not pd.isna(latest['Volume_Ratio']) and latest['Volume_Ratio'] > 1.3
+                        
+                        # RSI ไม่ overbought
+                        rsi_ok = not pd.isna(latest['RSI_14']) and latest['RSI_14'] < 65
+                        
+                        # เงื่อนไข breakout
+                        if 0 < dist_to_resistance_20 < 3 and volume_surge and rsi_ok:
+                            breakout_type = "แนวต้านระยะสั้น"
+                            probability = "สูง" if latest['Volume_Ratio'] > 1.5 else "ปานกลาง"
+                            
+                            results.append({
+                                'symbol': name,
+                                'code': symbol,
+                                'price': current_price,
+                                'resistance_20': resistance_20,
+                                'dist_to_resistance': dist_to_resistance_20,
+                                'volume_ratio': latest['Volume_Ratio'],
+                                'rsi': latest['RSI_14'],
+                                'breakout_type': breakout_type,
+                                'probability': probability,
+                                'target_1': resistance_20 * 1.03,
+                                'target_2': resistance_20 * 1.05,
+                                'stop_loss': current_price * 0.97
+                            })
+                        
+                        elif 0 < dist_to_resistance_50 < 5 and volume_surge:
+                            breakout_type = "แนวต้านหลัก"
+                            probability = "ปานกลาง"
+                            
+                            results.append({
+                                'symbol': name,
+                                'code': symbol,
+                                'price': current_price,
+                                'resistance_50': resistance_50,
+                                'dist_to_resistance': dist_to_resistance_50,
+                                'volume_ratio': latest['Volume_Ratio'],
+                                'rsi': latest['RSI_14'],
+                                'breakout_type': breakout_type,
+                                'probability': probability,
+                                'target_1': resistance_50 * 1.05,
+                                'target_2': resistance_50 * 1.08,
+                                'stop_loss': current_price * 0.95
+                            })
+            
+            except Exception as e:
+                pass
+        
+        # เรียงตามระยะห่างจากแนวต้าน
+        results.sort(key=lambda x: x['dist_to_resistance'])
+        
+        return results[:limit]
+    
+    def scan_oversold_rebound(self, limit=20):
+        """สแกนหาหุ้นที่ oversold และมีโอกาสรีบาวด์"""
+        results = []
+        
+        for symbol, name in self.thai_stocks.items():
+            try:
+                df, info = self.get_stock_data(symbol, period='3mo')
+                
+                if df is not None and not df.empty and len(df) > 20:
+                    df = self.calculate_indicators(df)
+                    
+                    latest = df.iloc[-1]
+                    current_price = latest['Close']
+                    
+                    # เงื่อนไข oversold
+                    rsi_oversold = not pd.isna(latest['RSI_14']) and latest['RSI_14'] < 35
+                    rsi_7_oversold = not pd.isna(latest['RSI_7']) and latest['RSI_7'] < 30
+                    
+                    # ราคาใกล้แนวรับ
+                    support_20 = latest['Support_20'] if not pd.isna(latest['Support_20']) else 0
+                    near_support = False
+                    if support_20 > 0:
+                        dist_to_support = ((current_price - support_20) / support_20) * 100
+                        near_support = 0 < dist_to_support < 3
+                    
+                    # MACD เริ่มมีสัญญาณซื้อ
+                    macd_bullish = False
+                    if not pd.isna(latest['MACD']) and not pd.isna(latest['MACD_Signal']):
+                        prev = df.iloc[-2]
+                        macd_bullish = latest['MACD'] > latest['MACD_Signal'] and prev['MACD'] <= prev['MACD_Signal']
+                    
+                    if (rsi_oversold or rsi_7_oversold) and (near_support or macd_bullish):
+                        rebound_score = 0
+                        if rsi_7_oversold:
+                            rebound_score += 2
+                        if near_support:
+                            rebound_score += 2
+                        if macd_bullish:
+                            rebound_score += 1
+                        if not pd.isna(latest['Volume_Ratio']) and latest['Volume_Ratio'] > 1:
+                            rebound_score += 1
+                        
+                        probability = "สูง" if rebound_score >= 4 else "ปานกลาง" if rebound_score >= 3 else "ต่ำ"
+                        
+                        results.append({
+                            'symbol': name,
+                            'code': symbol,
+                            'price': current_price,
+                            'rsi_14': latest['RSI_14'],
+                            'rsi_7': latest['RSI_7'],
+                            'support': support_20,
+                            'dist_to_support': dist_to_support if support_20 > 0 else 999,
+                            'macd_signal': "bullish" if macd_bullish else "neutral",
+                            'rebound_score': rebound_score,
+                            'probability': probability,
+                            'target_1': current_price * 1.03,
+                            'target_2': current_price * 1.05,
+                            'stop_loss': current_price * 0.95
+                        })
+            
+            except Exception as e:
+                pass
+        
+        # เรียงตามคะแนนรีบาวด์
+        results.sort(key=lambda x: x['rebound_score'], reverse=True)
+        
+        return results[:limit]
     
     def get_trend_analysis(self, df):
         """วิเคราะห์แนวโน้มแบบละเอียด"""
@@ -405,22 +734,22 @@ class StockAnalyzer:
         
         analysis = {}
         
-        if 'Support' in df and 'Resistance' in df:
-            support = latest['Support']
-            resistance = latest['Resistance']
+        if 'Support_20' in df and 'Resistance_20' in df:
+            support = latest['Support_20']
+            resistance = latest['Resistance_20']
             
             if not pd.isna(support) and not pd.isna(resistance) and support > 0 and price > 0:
                 # ระยะห่างจากแนวรับ/ต้าน
                 dist_to_support = ((price - support) / support) * 100
                 dist_to_resistance = ((resistance - price) / price) * 100
                 
-                analysis['Support'] = {
+                analysis['Support_20'] = {
                     'value': f"฿{support:.2f}",
                     'distance': f"{dist_to_support:.1f}%",
                     'signal': "ใกล้แนวรับ" if dist_to_support < 3 else "ไกลแนวรับ"
                 }
                 
-                analysis['Resistance'] = {
+                analysis['Resistance_20'] = {
                     'value': f"฿{resistance:.2f}",
                     'distance': f"{dist_to_resistance:.1f}%",
                     'signal': "ใกล้แนวต้าน" if dist_to_resistance < 3 else "ไกลแนวต้าน"
@@ -439,262 +768,4 @@ class StockAnalyzer:
                     'has_dividend': False
                 }
             
-            div_yield = info.get('dividend_yield', 0)
-            
-            # ถ้าไม่มีข้อมูล dividend_yield ลองดูจาก key อื่น
-            if div_yield == 0:
-                div_yield = info.get('dividendYield', 0)
-            
-            # ถ้าไม่มีข้อมูล
-            if div_yield is None or div_yield == 0:
-                # ลองดูจากห้าปีย้อนหลัง
-                div_5y = info.get('fiveYearAvgDividendYield', 0)
-                if div_5y and div_5y > 0:
-                    if div_5y > 1:
-                        div_percent = div_5y
-                    else:
-                        div_percent = div_5y * 100
-                    return {
-                        'dividend_yield': round(div_percent, 2),
-                        'payout_ratio': 0,
-                        'has_dividend': True
-                    }
-                
-                return {
-                    'dividend_yield': 0,
-                    'payout_ratio': 0,
-                    'has_dividend': False
-                }
-            
-            # Yahoo Finance ส่งค่ามาเป็นทศนิยม (0.05 = 5%)
-            if isinstance(div_yield, (int, float)):
-                if div_yield > 1:  # ถ้าเป็นเปอร์เซ็นต์แล้ว (ผิดปกติ)
-                    # ตรวจสอบว่ามันเป็นเปอร์เซ็นต์ที่มากเกินไปหรือไม่
-                    if div_yield > 100:  # เช่น 674% 
-                        # ลองหาร 100 เผื่อว่ามันคูณมาแล้ว
-                        div_percent = div_yield / 100
-                        if div_percent > 100:  # ยังเกินอยู่
-                            div_percent = 0
-                    else:
-                        div_percent = div_yield
-                else:
-                    div_percent = div_yield * 100
-            else:
-                div_percent = 0
-            
-            # ตรวจสอบค่าที่เป็นไปไม่ได้ (เกิน 30% ปกติหุ้นไม่ปันผลสูงขนาดนั้น)
-            if div_percent > 30:
-                # ถ้าเกิน 30% แสดงว่ามาจากการคำนวณผิด ให้ลองคำนวณใหม่
-                if isinstance(div_yield, (int, float)) and div_yield < 1:
-                    div_percent = div_yield * 100
-                else:
-                    div_percent = 0
-            
-            # Payout ratio
-            payout = info.get('payout_ratio', 0)
-            if payout == 0:
-                payout = info.get('payoutRatio', 0)
-                
-            if isinstance(payout, (int, float)):
-                if payout > 1:
-                    payout_percent = payout
-                else:
-                    payout_percent = payout * 100
-            else:
-                payout_percent = 0
-            
-            return {
-                'dividend_yield': round(div_percent, 2),
-                'payout_ratio': round(payout_percent, 2),
-                'has_dividend': div_percent > 0
-            }
-        except Exception as e:
-            print(f"Error in get_dividend_info: {e}")
-            return {
-                'dividend_yield': 0,
-                'payout_ratio': 0,
-                'has_dividend': False
-            }
-    
-    def get_fundamental_rating(self, info):
-        """ให้คะแนนปัจจัยพื้นฐานแบบละเอียด"""
-        if not info:
-            return 0, "ไม่มีข้อมูล", "⚪", []
-        
-        score = 0
-        max_score = 10
-        details = []
-        
-        # P/E Ratio (0-2 คะแนน)
-        pe = info.get('pe')
-        if pe and pe > 0:
-            if pe < 10:
-                score += 2
-                details.append("✅ P/E ต่ำมาก (ถูก)")
-            elif pe < 15:
-                score += 1.5
-                details.append("✅ P/E เหมาะสม")
-            elif pe < 20:
-                score += 1
-                details.append("⚪ P/E ปานกลาง")
-            elif pe < 30:
-                score += 0.5
-                details.append("⚠️ P/E ค่อนข้างสูง")
-            else:
-                details.append("❌ P/E สูงมาก (แพง)")
-        else:
-            details.append("❌ ไม่มีข้อมูล P/E")
-        
-        # P/B Ratio (0-2 คะแนน)
-        pb = info.get('pb')
-        if pb and pb > 0:
-            if pb < 1:
-                score += 2
-                details.append("✅ P/B ต่ำกว่า 1 (ถูกมาก)")
-            elif pb < 1.5:
-                score += 1.5
-                details.append("✅ P/B เหมาะสม")
-            elif pb < 2:
-                score += 1
-                details.append("⚪ P/B ปานกลาง")
-            elif pb < 3:
-                score += 0.5
-                details.append("⚠️ P/B ค่อนข้างสูง")
-            else:
-                details.append("❌ P/B สูงมาก")
-        else:
-            details.append("❌ ไม่มีข้อมูล P/B")
-        
-        # Dividend Yield (0-2 คะแนน)
-        div_info = self.get_dividend_info(info)
-        div = div_info['dividend_yield']
-        if div and div > 0:
-            if div > 5:
-                score += 2
-                details.append(f"✅ ปันผลสูง {div:.1f}%")
-            elif div > 3:
-                score += 1.5
-                details.append(f"✅ ปันผลดี {div:.1f}%")
-            elif div > 1:
-                score += 1
-                details.append(f"⚪ ปันผล {div:.1f}%")
-            else:
-                score += 0.5
-                details.append(f"⚠️ ปันผลต่ำ {div:.1f}%")
-        else:
-            details.append("❌ ไม่ปันผล")
-        
-        # ROE (0-1.5 คะแนน)
-        roe = info.get('roe')
-        if roe and roe > 0:
-            roe_pct = roe * 100
-            if roe_pct > 20:
-                score += 1.5
-                details.append(f"✅ ROE สูง {roe_pct:.1f}%")
-            elif roe_pct > 15:
-                score += 1
-                details.append(f"✅ ROE ดี {roe_pct:.1f}%")
-            elif roe_pct > 10:
-                score += 0.5
-                details.append(f"⚪ ROE ปานกลาง {roe_pct:.1f}%")
-            else:
-                details.append(f"⚠️ ROE ต่ำ {roe_pct:.1f}%")
-        
-        # Profit Margin (0-1.5 คะแนน)
-        margin = info.get('profit_margin')
-        if margin and margin > 0:
-            margin_pct = margin * 100
-            if margin_pct > 20:
-                score += 1.5
-                details.append(f"✅ อัตรากำไรสูง {margin_pct:.1f}%")
-            elif margin_pct > 15:
-                score += 1
-                details.append(f"✅ อัตรากำไรดี {margin_pct:.1f}%")
-            elif margin_pct > 10:
-                score += 0.5
-                details.append(f"⚪ อัตรากำไรปานกลาง {margin_pct:.1f}%")
-            else:
-                details.append(f"⚠️ อัตรากำไรต่ำ {margin_pct:.1f}%")
-        
-        # Debt to Equity (0-1 คะแนน)
-        debt = info.get('debt_to_equity')
-        if debt and debt > 0:
-            if debt < 0.5:
-                score += 1
-                details.append(f"✅ หนี้ต่ำ {debt:.2f}")
-            elif debt < 1:
-                score += 0.5
-                details.append(f"⚪ หนี้ปานกลาง {debt:.2f}")
-            else:
-                details.append(f"⚠️ หนี้สูง {debt:.2f}")
-        
-        # คำนวณคะแนน
-        final_score = (score / max_score) * 100
-        
-        if final_score >= 80:
-            rating = "ดีมาก"
-            emoji = "🟢"
-        elif final_score >= 60:
-            rating = "ดี"
-            emoji = "🟡"
-        elif final_score >= 40:
-            rating = "ปานกลาง"
-            emoji = "⚪"
-        else:
-            rating = "อ่อน"
-            emoji = "🔴"
-        
-        return final_score, rating, emoji, details
-    
-    def compare_with_sector(self, symbol, info):
-        """เปรียบเทียบกับหุ้นในหมวดเดียวกัน"""
-        if not info:
-            return {}
-        
-        sector = info.get('sector', '')
-        if not sector:
-            return {}
-        
-        comparison = {
-            'pe_vs_sector': 'N/A',
-            'pb_vs_sector': 'N/A',
-            'div_vs_sector': 'N/A'
-        }
-        
-        # หาค่าเฉลี่ยของหมวด
-        sector_pe = []
-        sector_pb = []
-        sector_div = []
-        
-        # ถ้ามีการกำหนดหมวดใน self.sectors
-        for sector_name, symbols in self.sectors.items():
-            if sector_name in sector or sector in sector_name:
-                for sym in symbols:
-                    try:
-                        stock = yf.Ticker(sym)
-                        s_info = stock.info
-                        if s_info.get('trailingPE'):
-                            sector_pe.append(s_info.get('trailingPE'))
-                        if s_info.get('priceToBook'):
-                            sector_pb.append(s_info.get('priceToBook'))
-                        if s_info.get('dividendYield'):
-                            div = s_info.get('dividendYield')
-                            if div and div < 1:
-                                sector_div.append(div * 100)
-                            else:
-                                sector_div.append(div)
-                    except:
-                        pass
-                break
-        
-        if sector_pe and info.get('pe'):
-            avg_pe = sum(sector_pe) / len(sector_pe)
-            pe_ratio = info.get('pe') / avg_pe
-            if pe_ratio < 0.8:
-                comparison['pe_vs_sector'] = "ต่ำกว่าหมวด (ถูก)"
-            elif pe_ratio > 1.2:
-                comparison['pe_vs_sector'] = "สูงกว่าหมวด (แพง)"
-            else:
-                comparison['pe_vs_sector'] = "ใกล้เคียงหมวด"
-        
-        return comparison
+            div_yield = info.get('
