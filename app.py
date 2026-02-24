@@ -552,75 +552,224 @@ with tab2:
     st.header("🚀 สแกนหุ้นโมเมนตัม (เล่นสั้น)")
     st.markdown("ค้นหาหุ้นที่มีโมเมนตัมแข็งแกร่ง เหมาะสำหรับเล่นสั้นทำกำไร")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        limit = st.number_input("จำนวนหุ้นที่ต้องการแสดง", min_value=5, max_value=50, value=20, step=5)
+    # ส่วนควบคุมการสแกน - จัดกึ่งกลาง
+    col1, col2, col3, col4 = st.columns([1, 2, 1, 2])
     with col2:
-        if st.button("🔍 เริ่มสแกนหุ้น", type="primary", key="scan_momentum"):
-            with st.spinner("กำลังสแกนหุ้นทั้งหมด กรุณารอสักครู่..."):
-                # สร้าง progress bar
-                progress_bar = st.progress(0)
-                status_text = st.empty()
+        st.markdown("### ⚙️ ตั้งค่าการสแกน")
+    with col3:
+        limit = st.number_input("จำนวนหุ้น", min_value=5, max_value=50, value=20, step=5)
+    with col4:
+        scan_btn = st.button("🔍 เริ่มสแกน", type="primary", use_container_width=True)
+    
+    st.markdown("---")
+    
+    # ตัวแปรเก็บผลลัพธ์การสแกน
+    if 'scan_results' not in st.session_state:
+        st.session_state.scan_results = None
+    if 'selected_scan_stock' not in st.session_state:
+        st.session_state.selected_scan_stock = None
+    
+    # เมื่อกดปุ่มสแกน
+    if scan_btn:
+        with st.spinner("กำลังสแกนหุ้นทั้งหมด กรุณารอสักครู่..."):
+            # แสดง progress bar
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            # เรียกใช้ฟังก์ชันสแกน
+            momentum_stocks = analyzer.scan_momentum_stocks(limit=limit)
+            
+            progress_bar.empty()
+            status_text.empty()
+            
+            # เก็บผลลัพธ์ไว้ใน session state
+            st.session_state.scan_results = momentum_stocks
+            
+            if momentum_stocks:
+                st.success(f"✅ พบ {len(momentum_stocks)} หุ้นที่มีโมเมนตัม")
+            else:
+                st.warning("⚠️ ไม่พบหุ้นที่มีโมเมนตัมในขณะนี้")
+    
+    # แสดงผลการสแกน (ถ้ามี)
+    if st.session_state.scan_results:
+        momentum_stocks = st.session_state.scan_results
+        
+        # สร้าง DataFrame
+        df_momentum = pd.DataFrame(momentum_stocks)
+        
+        # ตารางแสดงผลกว้างเต็ม
+        st.subheader("📋 รายชื่อหุ้นที่มีโมเมนตัม")
+        st.dataframe(
+            df_momentum,
+            column_config={
+                'symbol': 'หุ้น',
+                'code': 'รหัส',
+                'price': st.column_config.NumberColumn('ราคา', format="฿%.2f"),
+                'change_1d': st.column_config.NumberColumn('เปลี่ยน 1วัน', format="%.2f%%"),
+                'change_5d': st.column_config.NumberColumn('เปลี่ยน 5วัน', format="%.2f%%"),
+                'volume_ratio': st.column_config.NumberColumn('ปริมาณ', format="%.2f"),
+                'rsi': st.column_config.NumberColumn('RSI', format="%.2f"),
+                'momentum_score': 'คะแนน',
+                'momentum_pct': st.column_config.NumberColumn('โมเมนตัม', format="%.0f%%"),
+                'signal_type': 'สัญญาณ',
+                'holding_period': 'ระยะถือ',
+                'target': st.column_config.NumberColumn('เป้าหมาย', format="฿%.2f"),
+                'stop_loss': st.column_config.NumberColumn('Cut loss', format="฿%.2f")
+            },
+            use_container_width=True,
+            hide_index=True
+        )
+        
+        st.markdown("---")
+        
+        # เลือกหุ้นเพื่อดูกราฟ
+        st.subheader("📊 ดูกราฟเทคนิคประกอบ")
+        
+        # สร้างรายชื่อหุ้นสำหรับ dropdown
+        stock_options = [f"{row['symbol']} ({row['code']})" for _, row in df_momentum.iterrows()]
+        
+        selected_from_scan = st.selectbox(
+            "เลือกหุ้นที่ต้องการดูกราฟ",
+            options=stock_options,
+            index=0 if stock_options else None,
+            key="scan_stock_selector"
+        )
+        
+        if selected_from_scan and selected_from_scan != st.session_state.selected_scan_stock:
+            st.session_state.selected_scan_stock = selected_from_scan
+            # รีเฟรชเพื่อแสดงกราฟ
+            st.rerun()
+        
+        # แสดงกราฟของหุ้นที่เลือก
+        if st.session_state.selected_scan_stock:
+            # ดึงรหัสหุ้น
+            stock_code = st.session_state.selected_scan_stock.split('(')[-1].split(')')[0]
+            stock_name = st.session_state.selected_scan_stock.split('(')[0].strip()
+            
+            st.markdown(f"### 📈 {stock_name} ({stock_code})")
+            
+            # โหลดข้อมูลหุ้น
+            with st.spinner("กำลังโหลดข้อมูลกราฟ..."):
+                df_selected, info_selected = analyzer.get_stock_data(stock_code, period='3mo')
                 
-                # ฟังก์ชัน callback สำหรับอัปเดตความคืบหน้า
-                def update_progress(current, total, message):
-                    progress = (current + 1) / total
-                    progress_bar.progress(progress)
-                    status_text.text(message)
-                
-                # เรียกใช้ฟังก์ชันสแกน
-                momentum_stocks = analyzer.scan_momentum_stocks(limit=limit)
-                
-                progress_bar.empty()
-                status_text.empty()
-                
-                if momentum_stocks:
-                    st.success(f"พบ {len(momentum_stocks)} หุ้นที่มีโมเมนตัม")
+                if df_selected is not None and not df_selected.empty:
+                    # คำนวณ indicators
+                    df_selected = analyzer.calculate_indicators(df_selected)
                     
-                    # สร้าง DataFrame
-                    df_momentum = pd.DataFrame(momentum_stocks)
-                    
-                    # แสดงตาราง
-                    st.dataframe(
-                        df_momentum,
-                        column_config={
-                            'symbol': 'หุ้น',
-                            'code': 'รหัส',
-                            'price': st.column_config.NumberColumn('ราคา', format="฿%.2f"),
-                            'change_1d': st.column_config.NumberColumn('เปลี่ยน 1วัน', format="%.2f%%"),
-                            'change_5d': st.column_config.NumberColumn('เปลี่ยน 5วัน', format="%.2f%%"),
-                            'volume_ratio': st.column_config.NumberColumn('ปริมาณ', format="%.2f"),
-                            'rsi': st.column_config.NumberColumn('RSI', format="%.2f"),
-                            'momentum_pct': st.column_config.NumberColumn('โมเมนตัม', format="%.0f%%"),
-                            'signal_type': 'สัญญาณ',
-                            'holding_period': 'ระยะถือ',
-                            'target': st.column_config.NumberColumn('เป้าหมาย', format="฿%.2f"),
-                            'stop_loss': st.column_config.NumberColumn('Cut loss', format="฿%.2f")
-                        },
-                        use_container_width=True,
-                        hide_index=True
+                    # สร้างกราฟ 3 แถว (เหมือนใน Tab1)
+                    fig = make_subplots(
+                        rows=3, cols=1,
+                        shared_xaxes=True,
+                        vertical_spacing=0.08,
+                        row_heights=[0.5, 0.25, 0.25],
+                        subplot_titles=('กราฟราคาและปริมาณ', 'RSI (14)', 'MACD')
                     )
                     
-                    # แสดงรายละเอียดเพิ่มเติม
-                    st.subheader("📊 รายละเอียดสัญญาณ")
-                    for i, stock in enumerate(momentum_stocks[:5]):
-                        with st.expander(f"{i+1}. {stock['symbol']} ({stock['code']}) - {stock['signal_emoji']} {stock['signal_type']} ({stock['momentum_pct']:.0f}%)"):
-                            col1, col2, col3 = st.columns(3)
-                            with col1:
-                                st.metric("ราคาปัจจุบัน", f"฿{stock['price']:.2f}")
-                                st.metric("RSI", f"{stock['rsi']:.2f}")
-                            with col2:
-                                st.metric("เป้าหมาย", f"฿{stock['target']:.2f}")
-                                st.metric("Cut loss", f"฿{stock['stop_loss']:.2f}")
-                            with col3:
-                                st.metric("ระยะถือ", stock['holding_period'])
-                                st.metric("ATR", f"{stock['atr_pct']:.2f}%")
-                            
-                            st.markdown("**สัญญาณที่พบ:**")
-                            signals_text = ", ".join([f"✅ {s}" for s in stock['signals']])
-                            st.markdown(signals_text)
+                    # กราฟแท่งเทียน
+                    fig.add_trace(
+                        go.Candlestick(
+                            x=df_selected.index,
+                            open=df_selected['Open'],
+                            high=df_selected['High'],
+                            low=df_selected['Low'],
+                            close=df_selected['Close'],
+                            name='ราคา',
+                            showlegend=False
+                        ),
+                        row=1, col=1
+                    )
+                    
+                    # เพิ่ม SMA
+                    if 'SMA_20' in df_selected.columns:
+                        fig.add_trace(
+                            go.Scatter(x=df_selected.index, y=df_selected['SMA_20'], name='SMA 20', line=dict(color='orange', width=1)),
+                            row=1, col=1
+                        )
+                    
+                    if 'SMA_50' in df_selected.columns:
+                        fig.add_trace(
+                            go.Scatter(x=df_selected.index, y=df_selected['SMA_50'], name='SMA 50', line=dict(color='blue', width=1)),
+                            row=1, col=1
+                        )
+                    
+                    # เพิ่มปริมาณ
+                    colors = ['green' if df_selected['Close'].iloc[i] >= df_selected['Open'].iloc[i] else 'red' for i in range(len(df_selected))]
+                    fig.add_trace(
+                        go.Bar(x=df_selected.index, y=df_selected['Volume'], name='ปริมาณ', marker_color=colors, opacity=0.3),
+                        row=1, col=1
+                    )
+                    
+                    # RSI
+                    if 'RSI_14' in df_selected.columns:
+                        fig.add_trace(
+                            go.Scatter(x=df_selected.index, y=df_selected['RSI_14'], name='RSI 14', line=dict(color='purple', width=2)),
+                            row=2, col=1
+                        )
+                        fig.add_hline(y=70, line_dash="dash", line_color="red", opacity=0.5, row=2, col=1)
+                        fig.add_hline(y=30, line_dash="dash", line_color="green", opacity=0.5, row=2, col=1)
+                    
+                    # MACD
+                    if 'MACD' in df_selected.columns and 'MACD_Signal' in df_selected.columns:
+                        fig.add_trace(
+                            go.Scatter(x=df_selected.index, y=df_selected['MACD'], name='MACD', line=dict(color='blue', width=1.5)),
+                            row=3, col=1
+                        )
+                        fig.add_trace(
+                            go.Scatter(x=df_selected.index, y=df_selected['MACD_Signal'], name='Signal', line=dict(color='red', width=1.5)),
+                            row=3, col=1
+                        )
+                        
+                        if 'MACD_Histogram' in df_selected.columns:
+                            colors_macd = ['green' if val >= 0 else 'red' for val in df_selected['MACD_Histogram']]
+                            fig.add_trace(
+                                go.Bar(x=df_selected.index, y=df_selected['MACD_Histogram'], name='Histogram', marker_color=colors_macd, opacity=0.5),
+                                row=3, col=1
+                            )
+                    
+                    fig.update_layout(
+                        height=600,
+                        xaxis_rangeslider_visible=False,
+                        showlegend=False
+                    )
+                    fig.update_xaxes(title_text="วันที่", row=3, col=1)
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # สรุปสัญญาณสั้นๆ
+                    st.subheader("📊 สรุปสัญญาณ")
+                    latest = df_selected.iloc[-1]
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        rsi_val = latest['RSI_14'] if 'RSI_14' in latest else 50
+                        st.metric("RSI", f"{rsi_val:.2f}")
+                    
+                    with col2:
+                        vol_ratio = latest['Volume_Ratio'] if 'Volume_Ratio' in latest else 1
+                        vol_status = "สูง" if vol_ratio > 1.5 else "ปกติ" if vol_ratio > 0.8 else "ต่ำ"
+                        st.metric("Volume Ratio", f"{vol_ratio:.2f}", vol_status)
+                    
+                    with col3:
+                        if 'MACD' in latest and 'MACD_Signal' in latest:
+                            macd_status = "Bullish" if latest['MACD'] > latest['MACD_Signal'] else "Bearish"
+                            st.metric("MACD", macd_status)
+                        else:
+                            st.metric("MACD", "N/A")
+                    
+                    with col4:
+                        trend, _ = analyzer.get_trend_analysis(df_selected)
+                        st.metric("แนวโน้ม", trend)
+                    
+                    # แนวรับ/แนวต้าน
+                    sr = analyzer.get_support_resistance(df_selected)
+                    if sr:
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.info(f"🟢 แนวรับ: {sr['Support_20']['value']} (ห่าง {sr['Support_20']['distance']})")
+                        with col2:
+                            st.warning(f"🔴 แนวต้าน: {sr['Resistance_20']['value']} (ห่าง {sr['Resistance_20']['distance']})")
                 else:
-                    st.warning("ไม่พบหุ้นที่มีโมเมนตัมในขณะนี้")
+                    st.error("ไม่สามารถโหลดข้อมูลกราฟได้")
 
 with tab3:
     st.header("💥 สแกนหุ้น breakout")
