@@ -435,7 +435,9 @@ with tab1:
                         position = ((current_price - low) / (high - low)) * 100
                         st.markdown(f"- 52 สัปดาห์: ฿{low:.2f} - ฿{high:.2f}")
                         st.markdown(f"- ตำแหน่ง: {position:.1f}% ของช่วง")
-                        st.progress(position/100, text="")
+                        # ตรวจสอบให้แน่ใจว่าค่าอยู่ระหว่าง 0-1
+                    progress_value = max(0.0, min(1.0, position / 100))
+                    st.progress(progress_value, text="")
                 
                 # Target price
                 if info.get('target_price'):
