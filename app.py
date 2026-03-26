@@ -848,7 +848,7 @@ with tab5:
     analyzer = StockAnalyzer()
     portfolio = PortfolioManager()
     
-    # Sidebar
+    # Sidebar (ใช้ key ต่างจาก sidebar หลัก)
     with st.sidebar:
         st.header("⚙️ ตั้งค่า DCA")
         
@@ -857,28 +857,33 @@ with tab5:
         selected_code = st.selectbox(
             "เลือกหุ้น",
             stock_options,
-            format_func=lambda x: f"{analyzer.thai_stocks[x]} ({x})"
+            format_func=lambda x: f"{analyzer.thai_stocks[x]} ({x})",
+            key="dca_stock_select"
         )
         
         # กลยุทธ์
-        strategy = st.selectbox("กลยุทธ์", ["DCA (ลงทุนสม่ำเสมอ)", "EDCA (ซื้อเมื่อย่อ)"])
+        strategy = st.selectbox(
+            "กลยุทธ์", 
+            ["DCA (ลงทุนสม่ำเสมอ)", "EDCA (ซื้อเมื่อย่อ)"],
+            key="dca_strategy_select"
+        )
     
     # Main content
     col1, col2 = st.columns(2)
     
     with col1:
         st.subheader("💸 ข้อมูลการลงทุน")
-        initial_investment = st.number_input("เงินลงทุนเริ่มต้น (บาท)", min_value=0, value=10000, step=1000)
-        monthly_investment = st.number_input("เงินลงทุนต่อเดือน (บาท)", min_value=0, value=5000, step=500)
+        initial_investment = st.number_input("เงินลงทุนเริ่มต้น (บาท)", min_value=0, value=10000, step=1000, key="dca_initial")
+        monthly_investment = st.number_input("เงินลงทุนต่อเดือน (บาท)", min_value=0, value=5000, step=500, key="dca_monthly")
     
     with col2:
         st.subheader("📈 พอร์ตปัจจุบัน")
-        current_shares = st.number_input("จำนวนหุ้นที่ถืออยู่", min_value=0, value=0, step=100)
-        avg_cost = st.number_input("ต้นทุนเฉลี่ย (บาท/หุ้น)", min_value=0.0, value=0.0, step=0.5)
+        current_shares = st.number_input("จำนวนหุ้นที่ถืออยู่", min_value=0, value=0, step=100, key="dca_shares")
+        avg_cost = st.number_input("ต้นทุนเฉลี่ย (บาท/หุ้น)", min_value=0.0, value=0.0, step=0.5, key="dca_avg_cost")
     
     # ดึงข้อมูล
     @st.cache_data(ttl=3600)
-    def get_data(symbol, period="1y"):
+    def get_dca_data(symbol, period="1y"):
         df, info = analyzer.get_stock_data(symbol, period=period)
         if df is not None and not df.empty:
             df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
@@ -895,7 +900,7 @@ with tab5:
         return None
     
     with st.spinner("กำลังโหลดข้อมูล..."):
-        df = get_data(selected_code)
+        df = get_dca_data(selected_code)
     
     if df is not None:
         current_price = df['Close'].iloc[-1]
