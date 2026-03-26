@@ -7,7 +7,7 @@ import yfinance as yf
 
 from stock_analyzer import StockAnalyzer
 from portfolio_manager import PortfolioManager
-
+from datetime import datetime, timedelta
 # ตั้งค่าหน้า
 st.set_page_config(
     page_title="Thai Stock Analyzer Pro",
