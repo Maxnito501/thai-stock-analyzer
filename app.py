@@ -7,7 +7,7 @@ import yfinance as yf
 
 from stock_analyzer import StockAnalyzer
 from portfolio_manager import PortfolioManager
-from datetime import datetime, timedelta
+
 # ตั้งค่าหน้า
 st.set_page_config(
     page_title="Thai Stock Analyzer Pro",
@@ -39,7 +39,8 @@ if 'selected_stock' not in st.session_state:
     st.session_state.selected_stock = 'ADVANC.BK'
 
 # สร้างแท็บ
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📈 วิเคราะห์รายตัว", "🚀 สแกนหุ้นโมเมนตัม", "💥 สแกนหุ้น breakout", "📉 สแกนหุ้นรีบาวด์", "📊 DCA Plan"])
+tab1, tab2, tab3, tab4 = st.tabs(["📈 วิเคราะห์รายตัว", "🚀 สแกนหุ้นโมเมนตัม", "💥 สแกนหุ้น breakout", "📉 สแกนหุ้นรีบาวด์"])
+
 with tab1:
     # Sidebar
     with st.sidebar:
@@ -836,127 +837,6 @@ with tab4:
                 )
             else:
                 st.warning("ไม่พบหุ้นที่ oversold ในขณะนี้")
-with tab5:
-    st.header("📊 DCA / EDCA Plan")
-    st.markdown("วางแผนการลงทุนแบบ DCA (ลงทุนสม่ำเสมอ) และ EDCA (ซื้อเมื่อย่อ)")
-    
-    # โหลดคลาส
-    analyzer = StockAnalyzer()
-    portfolio = PortfolioManager()
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("💸 ข้อมูลการลงทุน")
-        initial_investment = st.number_input("เงินลงทุนเริ่มต้น (บาท)", min_value=0, value=10000, step=1000)
-        monthly_investment = st.number_input("เงินลงทุนต่อเดือน (บาท)", min_value=0, value=5000, step=500)
-    
-    with col2:
-        st.subheader("📈 พอร์ตปัจจุบัน")
-        current_shares = st.number_input("จำนวนหุ้นที่ถืออยู่", min_value=0, value=0, step=100)
-        avg_cost = st.number_input("ต้นทุนเฉลี่ย (บาท/หุ้น)", min_value=0.0, value=0.0, step=0.5)
-    
-    # เลือกหุ้น
-    stock_options = list(analyzer.thai_stocks.keys())
-    selected_code = st.selectbox(
-        "เลือกหุ้น",
-        stock_options,
-        format_func=lambda x: f"{analyzer.thai_stocks[x]} ({x})"
-    )
-    
-    # กลยุทธ์
-    strategy = st.selectbox("กลยุทธ์", ["DCA (ลงทุนสม่ำเสมอ)", "EDCA (ซื้อเมื่อย่อ)"])
-    
-    # ดึงข้อมูลราคา
-    @st.cache_data(ttl=3600)
-    def get_data(symbol):
-        df, info = analyzer.get_stock_data(symbol, period="1y")
-        if df is not None and not df.empty:
-            df['EMA200'] = df['Close'].ewm(span=200, adjust=False).mean()
-            return df
-        return None
-    
-    with st.spinner("กำลังโหลดข้อมูล..."):
-        df = get_data(selected_code)
-    
-    if df is not None:
-        current_price = df['Close'].iloc[-1]
-        st.metric("ราคาปัจจุบัน", f"฿{current_price:.2f}")
-        
-        st.markdown("---")
-        
-        # จำลอง DCA
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=365)
-        monthly_dates = pd.date_range(start=start_date, end=end_date, freq='MS')
-        
-        total_shares = current_shares
-        total_invested = current_shares * avg_cost if avg_cost > 0 else 0
-        results = []
-        
-        for i, date in enumerate(monthly_dates):
-            date_ts = pd.Timestamp(date)
-            closest_idx = df.index.get_indexer([date_ts], method='nearest')[0]
-            price = df['Close'].iloc[closest_idx]
-            
-            invest = initial_investment if i == 0 else monthly_investment
-            
-            if strategy == "EDCA (ซื้อเมื่อย่อ)":
-                if price < df['EMA200'].iloc[closest_idx]:
-                    invest = invest * 1.5
-                    note = "✨ EDCA (ซื้อเพิ่ม)"
-                else:
-                    note = "DCA ปกติ"
-            else:
-                note = "DCA ปกติ"
-            
-            shares_bought = invest / price if price > 0 else 0
-            total_shares += shares_bought
-            total_invested += invest
-            
-            results.append({
-                "วันที่": date.strftime("%d/%m/%Y"),
-                "ราคา": round(price, 2),
-                "ต่ำกว่า EMA200?": "✅" if price < df['EMA200'].iloc[closest_idx] else "❌",
-                "เงินลงทุน": f"฿{invest:,.0f}",
-                "ซื้อได้": f"{shares_bought:.0f} หุ้น",
-                "รวมหุ้น": f"{total_shares:.0f}",
-                "รวมเงินลงทุน": f"฿{total_invested:,.0f}",
-                "หมายเหตุ": note
-            })
-        
-        df_results = pd.DataFrame(results)
-        st.dataframe(df_results, use_container_width=True, hide_index=True)
-        
-        # สรุป
-        avg_cost_new = total_invested / total_shares if total_shares > 0 else 0
-        current_value = total_shares * current_price
-        profit = current_value - total_invested
-        profit_pct = (profit / total_invested) * 100 if total_invested > 0 else 0
-        
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("รวมหุ้น", f"{total_shares:.0f}")
-        with col2:
-            st.metric("ต้นทุนเฉลี่ย", f"฿{avg_cost_new:.2f}")
-        with col3:
-            st.metric("มูลค่าปัจจุบัน", f"฿{current_value:,.0f}")
-        with col4:
-            st.metric("กำไร/ขาดทุน", f"฿{profit:,.0f}", f"{profit_pct:.1f}%")
-        
-        # กราฟ
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=df.index, y=df['Close'], mode='lines', name='ราคา'))
-        fig.add_trace(go.Scatter(x=df.index, y=df['EMA200'], mode='lines', name='EMA200'))
-        
-        buy_dates = [datetime.strptime(r["วันที่"], "%d/%m/%Y") for r in results]
-        buy_prices = [float(r["เงินลงทุน"].replace("฿", "").replace(",", "")) / float(r["ซื้อได้"].replace(" หุ้น", "")) for r in results]
-        fig.add_trace(go.Scatter(x=buy_dates, y=buy_prices, mode='markers', name='จุดซื้อ', marker=dict(color='green', size=8)))
-        
-        fig.update_layout(title=f"ราคา {analyzer.thai_stocks[selected_code]}", height=400)
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.warning("ไม่สามารถดึงข้อมูลได้")
 
 st.markdown("---")
 st.caption("⚠️ ข้อมูลเพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำในการลงทุน ควรศึกษาข้อมูลเพิ่มเติมก่อนตัดสินใจลงทุน")
