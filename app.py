@@ -921,41 +921,48 @@ with tab5:
         results = []
         
         for i, date in enumerate(monthly_dates):
-            date_ts = pd.Timestamp(date)
-            closest_idx = df.index.get_indexer([date_ts], method='nearest')[0]
-            price = df['Close'].iloc[closest_idx]
-            
-            invest = initial_investment if i == 0 else monthly_investment
-            
-            note = ""
-            if strategy == "EDCA (ซื้อเมื่อย่อ)":
-                rsi = df['RSI'].iloc[closest_idx] if not pd.isna(df['RSI'].iloc[closest_idx]) else 50
-                price_below_ema = price < df['EMA200'].iloc[closest_idx]
-                
-                if rsi < 30 or price_below_ema:
-                    invest = invest * 1.5
-                    note = "✨ EDCA (ซื้อเพิ่ม)"
-                else:
-                    note = "DCA ปกติ"
-            else:
-                note = "DCA ปกติ"
-            
-            shares_bought = invest / price if price > 0 else 0
-            total_shares += shares_bought
-            total_invested += invest
-            
-            results.append({
-                "วันที่": date.strftime("%d/%m/%Y"),
-                "ราคา": round(price, 2),
-                "EMA200": round(df['EMA200'].iloc[closest_idx], 2),
-                "RSI": round(df['RSI'].iloc[closest_idx], 1) if not pd.isna(df['RSI'].iloc[closest_idx]) else 0,
-                "ต่ำกว่า EMA200?": "✅" if price < df['EMA200'].iloc[closest_idx] else "❌",
-                "เงินลงทุน": f"฿{invest:,.0f}",
-                "ซื้อได้": f"{shares_bought:.0f} หุ้น",
-                "รวมหุ้น": f"{total_shares:.0f}",
-                "รวมเงินลงทุน": f"฿{total_invested:,.0f}",
-                "หมายเหตุ": note
-            })
+    # ใช้ asof หาราคาล่าสุดก่อนหรือเท่ากับวันที่
+    price = df['Close'].asof(date)
+    if pd.isna(price):
+        price = df['Close'].iloc[0]
+    
+    # หาค่า EMA200 และ RSI ณ วันที่ใกล้เคียง
+    ema_value = df['EMA200'].asof(date)
+    if pd.isna(ema_value):
+        ema_value = df['EMA200'].iloc[0]
+    
+    rsi_value = df['RSI'].asof(date)
+    if pd.isna(rsi_value):
+        rsi_value = 50
+    
+    invest = initial_investment if i == 0 else monthly_investment
+    
+    note = ""
+    if strategy == "EDCA (ซื้อเมื่อย่อ)":
+        if rsi_value < 30 or price < ema_value:
+            invest = invest * 1.5
+            note = "✨ EDCA (ซื้อเพิ่ม)"
+        else:
+            note = "DCA ปกติ"
+    else:
+        note = "DCA ปกติ"
+    
+    shares_bought = invest / price if price > 0 else 0
+    total_shares += shares_bought
+    total_invested += invest
+    
+    results.append({
+        "วันที่": date.strftime("%d/%m/%Y"),
+        "ราคา": round(price, 2),
+        "EMA200": round(ema_value, 2),
+        "RSI": round(rsi_value, 1),
+        "ต่ำกว่า EMA200?": "✅" if price < ema_value else "❌",
+        "เงินลงทุน": f"฿{invest:,.0f}",
+        "ซื้อได้": f"{shares_bought:.0f} หุ้น",
+        "รวมหุ้น": f"{total_shares:.0f}",
+        "รวมเงินลงทุน": f"฿{total_invested:,.0f}",
+        "หมายเหตุ": note
+    })
         
         # แสดงตาราง
         st.subheader("📊 ผลการจำลอง")
