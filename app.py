@@ -895,7 +895,8 @@ with tab5:
         results = []
         
         for i, date in enumerate(monthly_dates):
-            closest_idx = df.index.get_indexer([date], method='nearest')[0]
+            date_ts = pd.Timestamp(date)
+            closest_idx = df.index.get_indexer([date_ts], method='nearest')[0]
             price = df['Close'].iloc[closest_idx]
             
             invest = initial_investment if i == 0 else monthly_investment
